@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 /* ── ISOMER Logo mark ──────────────────────────────────────────── */
 export const IsomerLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
@@ -71,9 +72,9 @@ export const Navbar: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
-        <button onClick={() => scrollTo('home')} className="focus:outline-none">
+        <Link to="/admin/login" className="focus:outline-none">
           <IsomerLogo size="md" />
-        </button>
+        </Link>
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-8">

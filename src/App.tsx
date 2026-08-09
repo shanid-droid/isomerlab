@@ -8,6 +8,7 @@ import Contact, { Footer } from './components/ContactFooter';
 import AdminLogin     from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import ProjectDetail  from './pages/ProjectDetail';
+import ProtectedRoute from './components/ProtectedRoute';
 
 /* ── Home page (single-page layout) ──────────────────────────────── */
 const HomePage: React.FC = () => (
@@ -30,7 +31,14 @@ const App: React.FC = () => (
       <Route path="/" element={<HomePage />} />
       <Route path="/projects/:slug" element={<ProjectDetail />} />
       <Route path="/admin/login" element={<AdminLogin />} />
-      <Route path="/admin" element={<AdminDashboard />} />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
       {/* Catch-all: redirect unknown paths to home */}
       <Route path="*" element={<HomePage />} />
     </Routes>

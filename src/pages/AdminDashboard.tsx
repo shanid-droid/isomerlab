@@ -107,6 +107,7 @@ const AdminDashboard: React.FC = () => {
 
   // 3. Logout action
   const handleLogout = async () => {
+    setUserEmail(null);
     await supabase.auth.signOut();
     navigate('/admin/login', { replace: true });
   };
@@ -534,9 +535,13 @@ const AdminDashboard: React.FC = () => {
             </Link>
 
             <button
+              id="admin-logout-btn"
               onClick={handleLogout}
-              className="btn-primary py-1.5 px-4 text-xs font-mono-custom"
+              className="btn-primary py-1.5 px-4 text-xs font-mono-custom flex items-center gap-1.5"
             >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
               LOGOUT
             </button>
           </div>

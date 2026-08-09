@@ -118,13 +118,16 @@ const AdminLogin: React.FC = () => {
 
           {/* Form Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-eg/30 bg-eg/10 mb-4">
+            <div className="flex justify-center mb-5">
+              <IsomerLogo size="lg" />
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-eg/30 bg-eg/10 mb-3">
               <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
               <span className="font-mono-custom text-[10px] tracking-widest text-eg uppercase">
-                ADMINISTRATION PORTAL
+                ADMIN ACCESS
               </span>
             </div>
-            <h1 className="font-display text-2xl font-bold tracking-widest text-white mb-2">
+            <h1 className="font-display text-xl font-bold tracking-widest text-white mb-2">
               ADMIN LOGIN
             </h1>
             <p className="font-sans text-xs text-white/40">
