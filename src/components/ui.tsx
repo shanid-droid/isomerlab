@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 /* ── ISOMER Logo mark ──────────────────────────────────────────── */
 export const IsomerLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
@@ -43,11 +44,22 @@ export const Navbar: React.FC = () => {
   const [scrolled, setScrolled]   = useState(false);
   const [menuOpen, setMenuOpen]   = useState(false);
   const [active,   setActive]     = useState('home');
+  const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+
+    // Auth session monitoring for Navbar button
+    supabase.auth.getSession().then(({ data: { session } }) => setHasSession(!!session?.user));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setHasSession(!!session?.user);
+    });
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const links = [
@@ -89,15 +101,24 @@ export const Navbar: React.FC = () => {
           ))}
         </nav>
 
-        {/* CTA */}
-        <button
-          onClick={() => scrollTo('contact')}
-          className="hidden md:flex btn-primary"
-          id="nav-cta"
-        >
-          Get In Touch
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {/* CTA & User Portal link */}
+        <div className="hidden md:flex items-center gap-4">
+          <Link
+            to={hasSession ? "/dashboard" : "/login"}
+            className="font-mono-custom text-xs text-white/70 hover:text-eg transition-colors px-3 py-1.5 rounded border border-white/10"
+          >
+            {hasSession ? "Dashboard" : "Sign In"}
+          </Link>
+
+          <button
+            onClick={() => scrollTo('contact')}
+            className="btn-primary"
+            id="nav-cta"
+          >
+            Get In Touch
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
         {/* Mobile hamburger */}
         <button
@@ -124,6 +145,12 @@ export const Navbar: React.FC = () => {
               {l.label}
             </button>
           ))}
+          <Link
+            to={hasSession ? "/dashboard" : "/login"}
+            className="nav-link text-left py-3 border-b border-eg/5 text-eg font-mono-custom text-xs"
+          >
+            {hasSession ? "→ My Dashboard" : "→ Sign In"}
+          </Link>
           <button onClick={() => scrollTo('contact')} className="btn-primary mt-4 justify-center">
             Get In Touch <ArrowRight className="w-3.5 h-3.5" />
           </button>

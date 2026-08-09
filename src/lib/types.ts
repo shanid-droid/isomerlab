@@ -1,6 +1,5 @@
 /* ── Supabase database type definitions ──────────────────────────
-   Mirrors only the columns consumed by the frontend.
-   Do NOT change the database schema — this is read-only.
+   Mirrors columns consumed by the frontend.
 ──────────────────────────────────────────────────────────────── */
 
 export interface Project {
@@ -12,6 +11,7 @@ export interface Project {
   components?: string[] | string | null;
   github_url?: string | null;
   published?: boolean;
+  created_by?: string | null;
   created_at?: string;
 }
 
@@ -23,6 +23,18 @@ export interface ProjectGalleryItem {
   created_at?: string;
 }
 
+export type UserRole = 'user' | 'admin';
+
+export interface UserProfile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  avatar_url?: string | null;
+  role: UserRole;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -31,6 +43,9 @@ export type Database = {
       };
       project_gallery: {
         Row: ProjectGalleryItem;
+      };
+      profiles: {
+        Row: UserProfile;
       };
     };
   };

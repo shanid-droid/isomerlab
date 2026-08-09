@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
-import type { Project, ProjectGalleryItem } from './types';
+import type { Project, ProjectGalleryItem, UserProfile } from './types';
 
 interface UseProjectsResult {
   projects: Project[];
@@ -127,3 +127,85 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
 
   return { project, gallery, loading, error };
 }
+
+interface UseUserProfileResult {
+  profile: UserProfile | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Fetches current authenticated user profile from `profiles` table.
+ */
+export function useUserProfile(): UseUserProfileResult {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfile() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          if (!cancelled) {
+            setProfile(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        const { data, error: fetchErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        const fallbackProfile: UserProfile = {
+          id: session.user.id,
+          full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          email: session.user.email || '',
+          avatar_url: session.user.user_metadata?.avatar_url || null,
+          role: 'user',
+          created_at: session.user.created_at,
+        };
+
+        if (fetchErr) {
+          console.warn('[Profiles Notice]:', fetchErr.message);
+          // Return fallback profile gracefully if row missing or schema issue
+          setProfile(fallbackProfile);
+        } else if (data) {
+          setProfile(data as UserProfile);
+        } else {
+          setProfile(fallbackProfile);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          console.warn('[Profiles Error]:', err?.message || err);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadProfile();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      loadProfile();
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  return { profile, loading, error };
+}
+

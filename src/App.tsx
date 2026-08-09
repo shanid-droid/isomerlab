@@ -9,6 +9,9 @@ import AdminLogin     from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import ProjectDetail  from './pages/ProjectDetail';
 import ProtectedRoute from './components/ProtectedRoute';
+import Login          from './pages/Login';
+import Signup         from './pages/Signup';
+import UserDashboard  from './pages/UserDashboard';
 
 /* ── Home page (single-page layout) ──────────────────────────────── */
 const HomePage: React.FC = () => (
@@ -30,11 +33,21 @@ const App: React.FC = () => (
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/projects/:slug" element={<ProjectDetail />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <UserDashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route
         path="/admin"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireAdmin>
             <AdminDashboard />
           </ProtectedRoute>
         }

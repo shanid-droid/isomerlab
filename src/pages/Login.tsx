@@ -3,17 +3,16 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 
-const AdminLogin: React.FC = () => {
+const Login: React.FC = () => {
   const navigate = useNavigate();
 
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading]   = useState(false);
+  const [loading, setLoading]         = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [error, setError]       = useState<string | null>(null);
+  const [error, setError]             = useState<string | null>(null);
 
-  // Helper function to check role from public.profiles and redirect accordingly
   const handleRoleRedirect = async (userId: string) => {
     try {
       const { data: profile, error } = await supabase
@@ -32,41 +31,26 @@ const AdminLogin: React.FC = () => {
     }
   };
 
-  // 1. Check if user is already authenticated -> redirect based on role
+  // Check existing session -> redirect if logged in
   useEffect(() => {
     let isMounted = true;
 
-    async function checkExistingSession() {
+    async function checkAuth() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (isMounted) {
-          if (session?.user) {
-            await handleRoleRedirect(session.user.id);
-          } else {
-            setCheckingAuth(false);
-          }
+        if (session?.user && isMounted) {
+          await handleRoleRedirect(session.user.id);
+        } else if (isMounted) {
+          setCheckingAuth(false);
         }
       } catch (err) {
         if (isMounted) setCheckingAuth(false);
       }
     }
 
-    checkExistingSession();
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (isMounted && session?.user) {
-        await handleRoleRedirect(session.user.id);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
+    checkAuth();
   }, [navigate]);
 
-  // 2. Handle login submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
@@ -110,10 +94,10 @@ const AdminLogin: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-dark bg-circuit text-white flex flex-col justify-between relative overflow-hidden">
-      {/* Background glowing gradients */}
+      {/* Ambient background glows */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-eg/5 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Header */}
+      {/* Header */}
       <header className="p-6 max-w-7xl mx-auto w-full flex items-center justify-between z-10">
         <Link to="/" className="focus:outline-none">
           <IsomerLogo size="md" />
@@ -126,7 +110,7 @@ const AdminLogin: React.FC = () => {
         </Link>
       </header>
 
-      {/* Main Form Container */}
+      {/* Form Container */}
       <main className="flex-1 flex items-center justify-center px-4 py-12 z-10">
         <div className="w-full max-w-md glass rounded-2xl p-8 border border-eg/20 shadow-2xl relative">
           {/* Futuristic Corner Accents */}
@@ -137,24 +121,21 @@ const AdminLogin: React.FC = () => {
 
           {/* Form Header */}
           <div className="text-center mb-8">
-            <div className="flex justify-center mb-5">
-              <IsomerLogo size="lg" />
-            </div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-eg/30 bg-eg/10 mb-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-eg/30 bg-eg/10 mb-4">
               <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
               <span className="font-mono-custom text-[10px] tracking-widest text-eg uppercase">
-                ADMIN ACCESS
+                USER PORTAL
               </span>
             </div>
-            <h1 className="font-display text-xl font-bold tracking-widest text-white mb-2">
-              ADMIN LOGIN
+            <h1 className="font-display text-2xl font-bold tracking-widest text-white mb-2">
+              SIGN IN
             </h1>
             <p className="font-sans text-xs text-white/40">
-              Sign in with your credentials to access management console.
+              Enter your credentials to access your dashboard.
             </p>
           </div>
 
-          {/* Error Message Display */}
+          {/* Error Message */}
           {error && (
             <div className="mb-6 p-4 rounded-xl border border-red-500/40 bg-red-500/10 flex items-start gap-3 animate-fade-in">
               <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -163,7 +144,7 @@ const AdminLogin: React.FC = () => {
               </svg>
               <div className="flex-1">
                 <p className="font-mono-custom text-xs font-semibold text-red-400 tracking-wider">
-                  AUTHENTICATION FAILED
+                  SIGN IN FAILED
                 </p>
                 <p className="font-sans text-xs text-red-300/80 mt-0.5 leading-relaxed">
                   {error}
@@ -172,46 +153,37 @@ const AdminLogin: React.FC = () => {
             </div>
           )}
 
-          {/* Login Form */}
+          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-            {/* Email Field */}
             <div className="space-y-2">
               <label
-                htmlFor="admin-email"
+                htmlFor="user-email"
                 className="block font-mono-custom text-[11px] tracking-widest text-white/60 uppercase"
               >
                 EMAIL ADDRESS
               </label>
-              <div className="relative">
-                <input
-                  id="admin-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@isomer.com"
-                  disabled={loading}
-                  required
-                  className="w-full bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-eg focus:ring-1 focus:ring-eg transition-all font-mono-custom"
-                />
-                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              </div>
+              <input
+                id="user-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@domain.com"
+                disabled={loading}
+                required
+                className="w-full bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-eg focus:ring-1 focus:ring-eg transition-all font-mono-custom"
+              />
             </div>
 
-            {/* Password Field */}
             <div className="space-y-2">
               <label
-                htmlFor="admin-password"
+                htmlFor="user-password"
                 className="block font-mono-custom text-[11px] tracking-widest text-white/60 uppercase"
               >
                 PASSWORD
               </label>
               <div className="relative">
                 <input
-                  id="admin-password"
+                  id="user-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -224,7 +196,7 @@ const AdminLogin: React.FC = () => {
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-eg transition-colors p-1 focus:outline-none"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? (
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -240,10 +212,9 @@ const AdminLogin: React.FC = () => {
               </div>
             </div>
 
-            {/* Login Button */}
             <button
               type="submit"
-              id="admin-login-submit-btn"
+              id="user-login-submit-btn"
               disabled={loading}
               className={`w-full btn-primary py-3.5 flex items-center justify-center gap-2 text-xs tracking-widest ${
                 loading ? 'opacity-70 cursor-not-allowed' : ''
@@ -256,23 +227,25 @@ const AdminLogin: React.FC = () => {
                 </>
               ) : (
                 <>
-                  SIGN IN TO CONSOLE
+                  LOG IN TO DASHBOARD
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Security Notice */}
+          {/* Bottom link to Signup */}
           <div className="mt-8 pt-4 border-t border-eg/10 text-center">
-            <p className="font-mono-custom text-[10px] tracking-widest text-white/20 uppercase">
-              RESTRICTED ACCESS · AUTHORIZED PERSONNEL ONLY
+            <p className="font-sans text-xs text-white/50">
+              Don't have an account yet?{' '}
+              <Link to="/signup" className="text-eg hover:underline font-mono-custom text-xs">
+                CREATE ACCOUNT
+              </Link>
             </p>
           </div>
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="p-6 text-center z-10">
         <p className="font-mono-custom text-[10px] tracking-widest text-white/20 uppercase">
           © 2025 ISOMER. All rights reserved.
@@ -282,4 +255,4 @@ const AdminLogin: React.FC = () => {
   );
 };
 
-export default AdminLogin;
+export default Login;

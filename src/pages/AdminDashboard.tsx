@@ -2,14 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo } from '../components/ui';
-import type { Project, ProjectGalleryItem } from '../lib/types';
+import type { Project, ProjectGalleryItem, UserProfile } from '../lib/types';
+
+export const OWNER_ID = '9d5d6287-1843-4cd0-afee-fc1830411571';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
 
   // Auth State
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+
+  const isOwner = currentUserId === OWNER_ID;
+
+  // Tab State
+  const [activeTab, setActiveTab] = useState<'projects' | 'users'>('projects');
 
   // Projects State
   const [projects, setProjects] = useState<Project[]>([]);
@@ -17,6 +25,16 @@ const AdminDashboard: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft'>('all');
+
+  // Users Management State
+  const [usersList, setUsersList] = useState<UserProfile[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersDbError, setUsersDbError] = useState<string | null>(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [roleModalUser, setRoleModalUser] = useState<UserProfile | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [targetNewRole, setTargetNewRole] = useState<'user' | 'admin' | null>(null);
+  const [updatingRole, setUpdatingRole] = useState(false);
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -46,6 +64,28 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
 
+    async function verifyAdminAuth(userId: string, emailStr?: string) {
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (isMounted) {
+          if (!error && profile?.role === 'admin') {
+            setUserEmail(emailStr ?? 'Admin');
+            setCurrentUserId(userId);
+            setCheckingAuth(false);
+          } else {
+            navigate('/dashboard', { replace: true });
+          }
+        }
+      } catch {
+        if (isMounted) navigate('/dashboard', { replace: true });
+      }
+    }
+
     async function checkAuthSession() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -53,10 +93,7 @@ const AdminDashboard: React.FC = () => {
           if (isMounted) navigate('/admin/login', { replace: true });
           return;
         }
-        if (isMounted) {
-          setUserEmail(session.user.email ?? 'Admin');
-          setCheckingAuth(false);
-        }
+        await verifyAdminAuth(session.user.id, session.user.email);
       } catch (err) {
         if (isMounted) navigate('/admin/login', { replace: true });
       }
@@ -64,12 +101,12 @@ const AdminDashboard: React.FC = () => {
 
     checkAuthSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (isMounted) {
         if (!session?.user) {
           navigate('/admin/login', { replace: true });
         } else {
-          setUserEmail(session.user.email ?? 'Admin');
+          await verifyAdminAuth(session.user.id, session.user.email);
         }
       }
     });
@@ -85,10 +122,14 @@ const AdminDashboard: React.FC = () => {
     setLoadingProjects(true);
     setErrorMsg(null);
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let query = supabase.from('projects').select('*');
+
+      // Ordinary admins see only projects they created
+      if (currentUserId && currentUserId !== OWNER_ID) {
+        query = query.eq('created_by', currentUserId);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       setProjects((data as Project[]) || []);
@@ -99,15 +140,88 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!checkingAuth) {
-      fetchProjects();
+  // 2b. Fetch Users list (Restricted to Owner)
+  const fetchUsers = async () => {
+    if (currentUserId !== OWNER_ID) return;
+    setLoadingUsers(true);
+    setUsersDbError(null);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        setUsersDbError(error.message);
+      } else {
+        setUsersList((data as UserProfile[]) || []);
+      }
+    } catch (err: any) {
+      setUsersDbError(err.message || 'Failed to load user profiles');
+    } finally {
+      setLoadingUsers(false);
     }
-  }, [checkingAuth]);
+  };
+
+  useEffect(() => {
+    if (!checkingAuth && currentUserId) {
+      fetchProjects();
+      if (isOwner) {
+        fetchUsers();
+      }
+    }
+  }, [checkingAuth, isOwner, currentUserId]);
+
+  // Tab protection safeguard for ordinary admins
+  useEffect(() => {
+    if (!isOwner && activeTab === 'users') {
+      setActiveTab('projects');
+    }
+  }, [isOwner, activeTab]);
+
+  // Handle Role Change Execution (Owner Only)
+  const handleConfirmRoleChange = async () => {
+    if (!isOwner) {
+      alert("Access Denied: Only the system owner can modify user roles.");
+      setRoleModalUser(null);
+      setTargetNewRole(null);
+      return;
+    }
+
+    if (!roleModalUser || !targetNewRole) return;
+
+    // Owner role safeguard check
+    if (roleModalUser.id === OWNER_ID) {
+      alert("Owner safeguard: The owner's admin role cannot be changed or removed.");
+      setRoleModalUser(null);
+      setTargetNewRole(null);
+      return;
+    }
+
+    setUpdatingRole(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: targetNewRole, updated_at: new Date().toISOString() })
+        .eq('id', roleModalUser.id);
+
+      if (error) throw error;
+
+      // Refresh users list
+      await fetchUsers();
+      setRoleModalUser(null);
+      setTargetNewRole(null);
+    } catch (err: any) {
+      alert(`Could not update user role: ${err.message}`);
+    } finally {
+      setUpdatingRole(false);
+    }
+  };
 
   // 3. Logout action
   const handleLogout = async () => {
     setUserEmail(null);
+    setCurrentUserId(null);
     await supabase.auth.signOut();
     navigate('/admin/login', { replace: true });
   };
@@ -300,7 +414,7 @@ const AdminDashboard: React.FC = () => {
       }
 
       // 2. Prepare payload
-      const projectPayload = {
+      const projectPayload: any = {
         title: formTitle.trim(),
         slug: formSlug.trim(),
         description: formDescription.trim(),
@@ -324,6 +438,9 @@ const AdminDashboard: React.FC = () => {
       } else {
         // INSERT new project
         setSubmitStatusText('Creating project record...');
+        if (currentUserId) {
+          projectPayload.created_by = currentUserId;
+        }
         const { data: newProj, error: insertError } = await supabase
           .from('projects')
           .insert([projectPayload])
@@ -491,6 +608,13 @@ const AdminDashboard: React.FC = () => {
   const publishedCount = projects.filter((p) => p.published === true).length;
   const draftCount = totalCount - publishedCount;
 
+  const filteredUsers = usersList.filter((u) => {
+    const q = userSearchQuery.toLowerCase();
+    const nameMatch = u.full_name ? u.full_name.toLowerCase().includes(q) : false;
+    const emailMatch = u.email ? u.email.toLowerCase().includes(q) : false;
+    return nameMatch || emailMatch;
+  });
+
   if (checkingAuth) {
     return (
       <div className="min-h-screen bg-dark bg-circuit flex items-center justify-center">
@@ -551,7 +675,35 @@ const AdminDashboard: React.FC = () => {
       {/* ── Main Dashboard Content ─────────────────────────────── */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
         
-        {/* Metric Cards Banner */}
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-3 border-b border-eg/10 pb-4">
+          <button
+            onClick={() => setActiveTab('projects')}
+            className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+              activeTab === 'projects'
+                ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            📁 PROJECTS ({projects.length})
+          </button>
+          {isOwner && (
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+                activeTab === 'users'
+                  ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                  : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              👥 USER MANAGEMENT ({usersList.length})
+            </button>
+          )}
+        </div>
+
+        {activeTab === 'projects' && (
+          <div className="space-y-8">
+            {/* Metric Cards Banner */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="glass rounded-xl p-5 border border-eg/15 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-16 h-16 bg-eg/5 rounded-bl-full pointer-events-none" />
@@ -811,6 +963,186 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+    )}
+
+        {/* ── USER MANAGEMENT TAB CONTENT ───────────────────────────── */}
+        {activeTab === 'users' && isOwner && (
+          <div className="space-y-6">
+            {/* Users Banner */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="glass rounded-xl p-5 border border-eg/15 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-eg/5 rounded-bl-full pointer-events-none" />
+                <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">
+                  TOTAL REGISTERED USERS
+                </p>
+                <p className="font-display text-3xl font-bold text-white">{usersList.length}</p>
+              </div>
+
+              <div className="glass rounded-xl p-5 border border-eg/15 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-eg/10 rounded-bl-full pointer-events-none" />
+                <p className="font-mono-custom text-[10px] tracking-widest text-eg uppercase mb-1">
+                  ADMINISTRATORS
+                </p>
+                <p className="font-display text-3xl font-bold text-eg text-glow-sm">
+                  {usersList.filter((u) => u.role === 'admin').length}
+                </p>
+              </div>
+
+              <div className="glass rounded-xl p-5 border border-eg/15 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-bl-full pointer-events-none" />
+                <p className="font-mono-custom text-[10px] tracking-widest text-blue-400 uppercase mb-1">
+                  NORMAL MEMBERS
+                </p>
+                <p className="font-display text-3xl font-bold text-blue-300">
+                  {usersList.filter((u) => u.role === 'user').length}
+                </p>
+              </div>
+            </div>
+
+            {/* Search Filter Header */}
+            <div className="glass rounded-xl p-5 border border-eg/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="w-full sm:w-96 relative">
+                <input
+                  type="text"
+                  placeholder="Search users by name or email..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="w-full bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-eg font-mono-custom"
+                />
+              </div>
+              <span className="font-mono-custom text-xs text-white/40">
+                Showing {filteredUsers.length} of {usersList.length} users
+              </span>
+            </div>
+
+            {/* Database Schema Warning Notice if public.profiles is missing */}
+            {usersDbError && (
+              <div className="p-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 space-y-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl mt-0.5">⚠️</span>
+                  <div>
+                    <h3 className="font-mono-custom text-xs font-bold text-amber-300 uppercase tracking-wider">
+                      DATABASE SCHEMA MIGRATION REQUIRED
+                    </h3>
+                    <p className="font-sans text-xs text-amber-200/80 mt-1 leading-relaxed">
+                      Supabase PostgREST returned: <code className="font-mono-custom text-[11px] bg-black/40 px-2 py-0.5 rounded text-amber-200">{usersDbError}</code>
+                    </p>
+                    <p className="font-sans text-xs text-white/70 mt-2 leading-relaxed">
+                      Please execute the SQL migration script from <code className="font-mono-custom text-eg">schema.sql</code> in your <strong>Supabase Dashboard SQL Editor</strong> to create the <code className="font-mono-custom text-eg">public.profiles</code> table, signup triggers, and RLS security policies.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Users Table */}
+            <div className="glass rounded-xl border border-eg/20 overflow-hidden">
+              {loadingUsers ? (
+                <div className="p-12 text-center">
+                  <div className="w-8 h-8 rounded-full border-2 border-eg/30 border-t-eg animate-spin mx-auto mb-3" />
+                  <span className="font-mono-custom text-xs text-white/40">LOADING USERS...</span>
+                </div>
+              ) : filteredUsers.length === 0 ? (
+                <div className="p-12 text-center">
+                  <span className="font-mono-custom text-xs text-white/40">NO MATCHING USERS FOUND</span>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-eg/10 bg-dark-300/40 text-[10px] font-mono-custom tracking-widest text-white/40 uppercase">
+                        <th className="py-4 px-6">USER</th>
+                        <th className="py-4 px-6">EMAIL</th>
+                        <th className="py-4 px-6">JOINED</th>
+                        <th className="py-4 px-6">ROLE</th>
+                        <th className="py-4 px-6 text-right">ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-eg/5 font-mono-custom text-xs">
+                      {filteredUsers.map((u) => {
+                        return (
+                          <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
+                            <td
+                              onClick={() => setSelectedUser(u)}
+                              className="py-4 px-6 flex items-center gap-3 cursor-pointer group"
+                            >
+                              {u.avatar_url ? (
+                                <img
+                                  src={u.avatar_url}
+                                  alt={u.full_name || 'User Avatar'}
+                                  className="w-8 h-8 rounded-full object-cover border border-eg/30"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-dark-300 border border-eg/30 flex items-center justify-center text-eg font-bold text-xs">
+                                  {u.full_name ? u.full_name.substring(0, 2).toUpperCase() : u.email?.substring(0, 2).toUpperCase() || 'US'}
+                                </div>
+                              )}
+                              <span className="text-white font-medium group-hover:text-eg transition-colors">{u.full_name || 'Anonymous User'}</span>
+                            </td>
+                            <td className="py-4 px-6 text-white/60">{u.email}</td>
+                            <td className="py-4 px-6 text-white/40">
+                              {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="py-4 px-6">
+                              <span
+                                className={`inline-block px-2.5 py-1 rounded text-[10px] uppercase tracking-wider font-semibold border ${
+                                  u.role === 'admin'
+                                    ? 'bg-eg/10 border-eg/40 text-eg'
+                                    : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                                }`}
+                              >
+                                {u.role}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => setSelectedUser(u)}
+                                  className="px-3 py-1.5 rounded border border-white/20 text-white/70 hover:text-white hover:bg-white/10 transition-colors text-[10px] tracking-wider"
+                                >
+                                  DETAILS
+                                </button>
+                                {u.role === 'user' ? (
+                                  <button
+                                    onClick={() => {
+                                      setRoleModalUser(u);
+                                      setTargetNewRole('admin');
+                                    }}
+                                    className="px-3 py-1.5 rounded border border-eg/40 text-eg hover:bg-eg/10 transition-colors text-[10px] tracking-wider"
+                                  >
+                                    PROMOTE TO ADMIN
+                                  </button>
+                                ) : (
+                                  <button
+                                    disabled={u.id === OWNER_ID}
+                                    onClick={() => {
+                                      if (u.id === OWNER_ID) return;
+                                      setRoleModalUser(u);
+                                      setTargetNewRole('user');
+                                    }}
+                                    title={u.id === OWNER_ID ? "Owner role cannot be changed" : "Demote to User"}
+                                    className={`px-3 py-1.5 rounded border text-[10px] tracking-wider transition-colors ${
+                                      u.id === OWNER_ID
+                                        ? 'border-white/10 text-white/20 cursor-not-allowed opacity-40'
+                                        : 'border-amber-500/40 text-amber-300 hover:bg-amber-500/10'
+                                    }`}
+                                  >
+                                    {u.id === OWNER_ID ? 'SYSTEM OWNER' : 'DEMOTE TO USER'}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ── ADD / EDIT PROJECT MODAL ────────────────────────────── */}
@@ -1106,6 +1438,204 @@ const AdminDashboard: React.FC = () => {
                 className="px-5 py-2.5 rounded-lg border border-red-500/60 bg-red-500/20 hover:bg-red-500/30 text-red-300 font-mono-custom text-xs tracking-wider transition-all"
               >
                 {submitting ? 'DELETING...' : 'DELETE PROJECT'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── USER DETAILS MODAL ─────────────────────────────────────── */}
+      {selectedUser && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass rounded-2xl border border-eg/30 p-6 max-w-lg w-full shadow-2xl space-y-6 relative overflow-hidden">
+            {/* Corner accents */}
+            <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-eg/60" />
+            <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-eg/60" />
+            <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-eg/60" />
+            <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-eg/60" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-eg/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-eg/10 border border-eg/30 flex items-center justify-center text-eg font-bold text-lg">
+                  👤
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-bold text-white tracking-wider">
+                    USER PROFILE DETAILS
+                  </h3>
+                  <p className="font-mono-custom text-[10px] text-eg uppercase">
+                    ISOMER USER RECORD
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="text-white/40 hover:text-white transition-colors p-1"
+                aria-label="Close user details"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Profile Avatar & Primary Info */}
+            <div className="flex items-center gap-4 bg-dark-200/50 p-4 rounded-xl border border-white/5">
+              {selectedUser.avatar_url ? (
+                <img
+                  src={selectedUser.avatar_url}
+                  alt={selectedUser.full_name || 'User Avatar'}
+                  className="w-16 h-16 rounded-xl object-cover border-2 border-eg/40 shadow-eg-sm"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-dark-300 border-2 border-eg/40 flex items-center justify-center text-eg font-display font-bold text-xl shadow-eg-sm">
+                  {selectedUser.full_name
+                    ? selectedUser.full_name.substring(0, 2).toUpperCase()
+                    : selectedUser.email?.substring(0, 2).toUpperCase() || 'US'}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h4 className="font-display text-lg font-bold text-white truncate">
+                  {selectedUser.full_name || 'Anonymous User'}
+                </h4>
+                <p className="font-mono-custom text-xs text-white/60 truncate mt-0.5">
+                  {selectedUser.email}
+                </p>
+                <div className="mt-2">
+                  <span
+                    className={`inline-block px-2.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold border ${
+                      selectedUser.role === 'admin'
+                        ? 'bg-eg/10 border-eg/40 text-eg'
+                        : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                    }`}
+                  >
+                    ROLE: {selectedUser.role}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Details Meta Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono-custom text-xs">
+              <div className="bg-dark-200/60 p-3.5 rounded-xl border border-white/5 space-y-1">
+                <p className="text-[10px] tracking-widest text-white/40 uppercase">USER ID (UUID)</p>
+                <p className="text-[11px] text-white font-mono select-all truncate">{selectedUser.id}</p>
+              </div>
+
+              <div className="bg-dark-200/60 p-3.5 rounded-xl border border-white/5 space-y-1">
+                <p className="text-[10px] tracking-widest text-white/40 uppercase">ACCOUNT CREATED</p>
+                <p className="text-white font-medium">
+                  {selectedUser.created_at
+                    ? new Date(selectedUser.created_at).toLocaleString()
+                    : 'N/A'}
+                </p>
+              </div>
+
+              <div className="bg-dark-200/60 p-3.5 rounded-xl border border-white/5 space-y-1">
+                <p className="text-[10px] tracking-widest text-white/40 uppercase">LAST UPDATED</p>
+                <p className="text-white font-medium">
+                  {selectedUser.updated_at
+                    ? new Date(selectedUser.updated_at).toLocaleString()
+                    : 'N/A'}
+                </p>
+              </div>
+
+              <div className="bg-dark-200/60 p-3.5 rounded-xl border border-white/5 space-y-1">
+                <p className="text-[10px] tracking-widest text-white/40 uppercase">SYSTEM STATUS</p>
+                <p className="text-eg font-medium flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-eg animate-pulse" />
+                  ACTIVE USER
+                </p>
+              </div>
+            </div>
+
+            {/* Footer Action Bar */}
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-eg/10">
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="px-4 py-2 rounded-lg font-mono-custom text-xs text-white/60 hover:text-white transition-colors"
+              >
+                CLOSE
+              </button>
+
+              {selectedUser.role === 'user' ? (
+                <button
+                  onClick={() => {
+                    const u = selectedUser;
+                    setSelectedUser(null);
+                    setRoleModalUser(u);
+                    setTargetNewRole('admin');
+                  }}
+                  className="px-4 py-2 rounded-lg border border-eg/40 bg-eg/10 text-eg hover:bg-eg/20 font-mono-custom text-xs tracking-wider transition-colors"
+                >
+                  PROMOTE TO ADMIN
+                </button>
+              ) : (
+                <button
+                  disabled={selectedUser.id === OWNER_ID}
+                  onClick={() => {
+                    if (selectedUser.id === OWNER_ID) return;
+                    const u = selectedUser;
+                    setSelectedUser(null);
+                    setRoleModalUser(u);
+                    setTargetNewRole('user');
+                  }}
+                  title={selectedUser.id === OWNER_ID ? "Owner role cannot be changed" : "Demote user to normal role"}
+                  className={`px-4 py-2 rounded-lg border font-mono-custom text-xs tracking-wider transition-colors ${
+                    selectedUser.id === OWNER_ID
+                      ? 'border-white/10 text-white/20 cursor-not-allowed opacity-40'
+                      : 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+                  }`}
+                >
+                  {selectedUser.id === OWNER_ID ? 'SYSTEM OWNER' : 'DEMOTE TO USER'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ROLE CHANGE CONFIRMATION MODAL ──────────────────────────── */}
+      {roleModalUser && targetNewRole && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass rounded-2xl border border-eg/30 p-6 max-w-md w-full shadow-2xl space-y-5">
+            <div className="flex items-center gap-3 text-eg">
+              <div className="w-10 h-10 rounded-full border border-eg/40 bg-eg/10 flex items-center justify-center flex-shrink-0 font-bold text-sm">
+                🛡️
+              </div>
+              <div>
+                <h3 className="font-display text-sm font-bold text-white tracking-wider">
+                  CONFIRM ROLE CHANGE
+                </h3>
+                <p className="font-mono-custom text-[10px] text-eg uppercase">
+                  USER PERMISSIONS MANAGEMENT
+                </p>
+              </div>
+            </div>
+
+            <p className="font-sans text-xs text-white/80 leading-relaxed">
+              Are you sure you want to change the role of{' '}
+              <span className="font-semibold text-white">{roleModalUser.full_name || roleModalUser.email}</span> to{' '}
+              <span className="font-bold text-eg uppercase">{targetNewRole}</span>?
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setRoleModalUser(null);
+                  setTargetNewRole(null);
+                }}
+                disabled={updatingRole}
+                className="px-4 py-2 rounded-lg font-mono-custom text-xs text-white/60 hover:text-white"
+              >
+                CANCEL
+              </button>
+
+              <button
+                onClick={handleConfirmRoleChange}
+                disabled={updatingRole}
+                className="btn-primary py-2 px-5 text-xs flex items-center gap-2"
+              >
+                {updatingRole ? 'UPDATING...' : 'CONFIRM ROLE CHANGE'}
               </button>
             </div>
           </div>
