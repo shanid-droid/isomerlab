@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
-import type { Project, ProjectGalleryItem, UserProfile } from './types';
+import type { Project, ProjectGalleryItem, UserProfile, ProjectWithCreator } from './types';
 
 interface UseProjectsResult {
-  projects: Project[];
+  projects: ProjectWithCreator[];
   loading: boolean;
   error: string | null;
 }
@@ -15,12 +15,30 @@ interface UseProjectBySlugResult {
   error: string | null;
 }
 
+interface UseUserProfileResult {
+  profile: UserProfile | null;
+  loading: boolean;
+  error: string | null;
+}
+
+interface UsePublicProfileResult {
+  profile: UserProfile | null;
+  loading: boolean;
+  error: string | null;
+}
+
+interface UseCreatorProjectsResult {
+  projects: Project[];
+  loading: boolean;
+  error: string | null;
+}
+
 /**
- * Fetches all rows from the `projects` table where status = 'published'.
- * Ordered by created_at descending so newest projects appear first.
+ * Fetches all published projects, joined with creator profile info.
+ * Optionally filtered by a specific creator UUID.
  */
-export function useProjects(): UseProjectsResult {
-  const [projects, setProjects] = useState<Project[]>([]);
+export function useProjects(creatorId?: string): UseProjectsResult {
+  const [projects, setProjects] = useState<ProjectWithCreator[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
 
@@ -31,11 +49,17 @@ export function useProjects(): UseProjectsResult {
       setLoading(true);
       setError(null);
 
-      const { data, error: sbError } = await supabase
+      let query = supabase
         .from('projects')
         .select('*')
         .eq('published', true)
         .order('created_at', { ascending: false });
+
+      if (creatorId) {
+        query = query.eq('created_by', creatorId);
+      }
+
+      const { data, error: sbError } = await query;
 
       if (cancelled) return;
 
@@ -45,19 +69,58 @@ export function useProjects(): UseProjectsResult {
         return;
       }
 
-      setProjects((data as Project[]) ?? []);
+      const projectRows = (data as Project[]) ?? [];
+
+      // Fetch creator profiles for all unique created_by UUIDs
+      const creatorIds = [
+        ...new Set(
+          projectRows
+            .map((p) => p.created_by)
+            .filter(Boolean) as string[]
+        ),
+      ];
+
+      let creatorMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
+
+      if (creatorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .in('id', creatorIds);
+
+        if (profiles) {
+          for (const p of profiles) {
+            creatorMap[p.id] = {
+              full_name: p.full_name,
+              avatar_url: p.avatar_url,
+            };
+          }
+        }
+      }
+
+      if (cancelled) return;
+
+      const enriched: ProjectWithCreator[] = projectRows.map((p) => ({
+        ...p,
+        creator_name: p.created_by ? (creatorMap[p.created_by]?.full_name ?? null) : null,
+        creator_avatar_url: p.created_by
+          ? (creatorMap[p.created_by]?.avatar_url ?? null)
+          : null,
+      }));
+
+      setProjects(enriched);
       setLoading(false);
     }
 
     fetchProjects();
     return () => { cancelled = true; };
-  }, []);
+  }, [creatorId]);
 
   return { projects, loading, error };
 }
 
 /**
- * Fetches a single published project by its slug along with gallery images from project_gallery.
+ * Fetches a single published project by its slug along with gallery images.
  */
 export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResult {
   const [project, setProject] = useState<Project | null>(null);
@@ -111,7 +174,6 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
       if (cancelled) return;
 
       if (galleryError) {
-        // Log gallery error non-fatally or set gallery to empty
         console.warn('Failed to load gallery:', galleryError.message);
         setGallery([]);
       } else {
@@ -126,12 +188,6 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
   }, [slug]);
 
   return { project, gallery, loading, error };
-}
-
-interface UseUserProfileResult {
-  profile: UserProfile | null;
-  loading: boolean;
-  error: string | null;
 }
 
 /**
@@ -173,21 +229,23 @@ export function useUserProfile(): UseUserProfileResult {
           email: session.user.email || '',
           avatar_url: session.user.user_metadata?.avatar_url || null,
           role: 'user',
+          bio: null,
+          about: null,
+          social_links: {},
           created_at: session.user.created_at,
         };
 
         if (fetchErr) {
           console.warn('[Profiles Notice]:', fetchErr.message);
-          // Return fallback profile gracefully if row missing or schema issue
           setProfile(fallbackProfile);
         } else if (data) {
           setProfile(data as UserProfile);
         } else {
           setProfile(fallbackProfile);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          console.warn('[Profiles Error]:', err?.message || err);
+          console.warn('[Profiles Error]:', (err as Error)?.message || err);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -209,3 +267,94 @@ export function useUserProfile(): UseUserProfileResult {
   return { profile, loading, error };
 }
 
+/**
+ * Fetches a public profile by user UUID.
+ * Used on the public /profile/:id page.
+ * Only reads safe public fields.
+ */
+export function usePublicProfile(userId: string | undefined): UsePublicProfileResult {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+
+    async function fetchProfile() {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchErr } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, bio, about, social_links, created_at')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (fetchErr) {
+        setError(fetchErr.message);
+        setLoading(false);
+        return;
+      }
+
+      setProfile(data as UserProfile | null);
+      setLoading(false);
+    }
+
+    fetchProfile();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  return { profile, loading, error };
+}
+
+/**
+ * Fetches all published projects by a given creator UUID.
+ * Used on the public profile page to show their uploaded projects.
+ */
+export function useCreatorProjects(creatorId: string | undefined): UseCreatorProjectsResult {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!creatorId) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+
+    async function fetchProjects() {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: sbError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('published', true)
+        .eq('created_by', creatorId)
+        .order('created_at', { ascending: false });
+
+      if (cancelled) return;
+
+      if (sbError) {
+        setError(sbError.message);
+        setLoading(false);
+        return;
+      }
+
+      setProjects((data as Project[]) ?? []);
+      setLoading(false);
+    }
+
+    fetchProjects();
+    return () => { cancelled = true; };
+  }, [creatorId]);
+
+  return { projects, loading, error };
+}

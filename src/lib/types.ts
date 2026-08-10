@@ -25,14 +25,33 @@ export interface ProjectGalleryItem {
 
 export type UserRole = 'user' | 'admin';
 
+export interface SocialLinks {
+  twitter?: string;
+  github?: string;
+  linkedin?: string;
+  instagram?: string;
+  website?: string;
+  youtube?: string;
+  [key: string]: string | undefined;
+}
+
 export interface UserProfile {
   id: string;
   full_name: string | null;
   email: string | null;
   avatar_url?: string | null;
   role: UserRole;
+  bio?: string | null;
+  about?: string | null;
+  social_links?: SocialLinks | null;
   created_at?: string;
   updated_at?: string;
+}
+
+/** Project with creator profile info joined in */
+export interface ProjectWithCreator extends Project {
+  creator_name?: string | null;
+  creator_avatar_url?: string | null;
 }
 
 export type Database = {

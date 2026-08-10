@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProjectBySlug } from '../lib/hooks';
+import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
+import type { UserProfile } from '../lib/types';
 
 /* ── GitHub Icon Component ───────────────────────────────────────── */
 const GithubIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -10,7 +12,7 @@ const GithubIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" })
   </svg>
 );
 
-/* ── Lightbox Modal for Gallery Images with Keyboard & Carousel Support ── */
+/* ── Lightbox Modal ──────────────────────────────────────────────── */
 const LightboxModal: React.FC<{
   images: string[];
   currentIndex: number;
@@ -28,14 +30,12 @@ const LightboxModal: React.FC<{
     onSelectIndex((currentIndex + 1) % total);
   }, [currentIndex, total, onSelectIndex]);
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowLeft' && total > 1) handlePrev();
       if (e.key === 'ArrowRight' && total > 1) handleNext();
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, handlePrev, handleNext, total]);
@@ -46,7 +46,6 @@ const LightboxModal: React.FC<{
       onClick={onClose}
     >
       <div className="relative max-w-6xl w-full flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
-        {/* Top Controls Bar */}
         <div className="w-full flex items-center justify-between px-2 text-white/70">
           <div className="font-mono-custom text-xs tracking-widest text-eg/90 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
@@ -60,44 +59,33 @@ const LightboxModal: React.FC<{
           </button>
         </div>
 
-        {/* Main Image Container */}
         <div className="relative border border-eg/30 rounded-2xl overflow-hidden glass p-2 max-h-[75vh] w-full flex items-center justify-center shadow-2xl group">
           <img
             src={currentUrl}
             alt={`Gallery view ${currentIndex + 1}`}
             className="max-h-[72vh] max-w-full object-contain rounded-xl transition-all duration-300"
           />
-
-          {/* Corner Frames */}
           <div className="absolute top-4 left-4 w-5 h-5 border-t-2 border-l-2 border-eg/70" />
           <div className="absolute top-4 right-4 w-5 h-5 border-t-2 border-r-2 border-eg/70" />
           <div className="absolute bottom-4 left-4 w-5 h-5 border-b-2 border-l-2 border-eg/70" />
           <div className="absolute bottom-4 right-4 w-5 h-5 border-b-2 border-r-2 border-eg/70" />
 
-          {/* Carousel Prev Button */}
           {total > 1 && (
             <button
               onClick={handlePrev}
               aria-label="Previous image"
               className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full glass border border-eg/40 text-eg flex items-center justify-center hover:bg-eg/20 hover:scale-110 transition-all"
-            >
-              ←
-            </button>
+            >←</button>
           )}
-
-          {/* Carousel Next Button */}
           {total > 1 && (
             <button
               onClick={handleNext}
               aria-label="Next image"
               className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full glass border border-eg/40 text-eg flex items-center justify-center hover:bg-eg/20 hover:scale-110 transition-all"
-            >
-              →
-            </button>
+            >→</button>
           )}
         </div>
 
-        {/* Thumbnails strip for fast jumping */}
         {total > 1 && (
           <div className="flex items-center gap-2 overflow-x-auto max-w-full p-2">
             {images.map((url, idx) => (
@@ -128,7 +116,6 @@ const Skeleton: React.FC = () => (
       <div className="flex gap-2">
         <div className="h-7 w-24 rounded-md bg-dark-400/60" />
         <div className="h-7 w-28 rounded-md bg-dark-400/60" />
-        <div className="h-7 w-20 rounded-md bg-dark-400/60" />
       </div>
     </div>
     <div className="glass rounded-xl p-8 space-y-4">
@@ -161,13 +148,63 @@ const NotFound: React.FC = () => (
   </div>
 );
 
+/* ── Creator Profile Chip ────────────────────────────────────────── */
+const CreatorChip: React.FC<{ creatorId: string }> = ({ creatorId }) => {
+  const [creator, setCreator] = useState<Partial<UserProfile> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .eq('id', creatorId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setCreator(data);
+      });
+    return () => { cancelled = true; };
+  }, [creatorId]);
+
+  if (!creator) return null;
+
+  const initials = creator.full_name
+    ? creator.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
+
+  return (
+    <Link
+      to={`/profile/${creatorId}`}
+      id="project-creator-link"
+      className="inline-flex items-center gap-3 glass rounded-2xl px-5 py-3 border border-eg/20 hover:border-eg/50 transition-all duration-300 group"
+    >
+      {creator.avatar_url ? (
+        <img
+          src={creator.avatar_url}
+          alt={creator.full_name || 'Creator'}
+          className="w-10 h-10 rounded-full object-cover border-2 border-eg/40"
+        />
+      ) : (
+        <div className="w-10 h-10 rounded-full bg-dark-300 border-2 border-eg/40 flex items-center justify-center">
+          <span className="font-display text-sm font-bold text-eg">{initials}</span>
+        </div>
+      )}
+      <div>
+        <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase">CREATED BY</p>
+        <p className="font-display text-sm font-semibold text-white group-hover:text-eg transition-colors">
+          {creator.full_name || 'ISOMER Member'}
+        </p>
+      </div>
+      <ArrowRight className="w-3.5 h-3.5 text-eg/40 group-hover:text-eg ml-auto transition-colors" />
+    </Link>
+  );
+};
+
 /* ── Project Detail Page ─────────────────────────────────────────── */
 const ProjectDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const { project, gallery, loading, error } = useProjectBySlug(slug);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
-  // Helper to parse components used (handles string, array, or null)
   const parseComponents = (compData: string[] | string | null | undefined): string[] => {
     if (!compData) return [];
     if (Array.isArray(compData)) return compData;
@@ -178,26 +215,30 @@ const ProjectDetail: React.FC = () => {
   };
 
   const componentsList = parseComponents(project?.components);
-
-  // Gallery array of image URLs
   const galleryUrls = gallery.map((item) => item.image_url);
 
-  // Extract short summary intro if description has multiple paragraphs
   const descriptionText = project?.description || '';
   const firstParagraphEnd = descriptionText.indexOf('\n\n');
   const shortIntro = firstParagraphEnd !== -1 ? descriptionText.substring(0, firstParagraphEnd) : null;
   const mainDescription = firstParagraphEnd !== -1 ? descriptionText.substring(firstParagraphEnd).trim() : descriptionText;
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return null;
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      });
+    } catch { return null; }
+  };
+
   return (
     <div className="min-h-screen bg-dark bg-circuit text-white flex flex-col selection:bg-eg/30">
-      {/* ── Sticky Header / Navbar ──────────────────────────────── */}
+      {/* ── Sticky Header ──────────────────────────────────────────── */}
       <header className="glass-dark border-b border-eg/10 py-4 sticky top-0 z-40 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           <Link to="/" className="focus:outline-none">
             <IsomerLogo size="md" />
           </Link>
-
-          {/* Back to Projects Action Button */}
           <Link
             to="/#projects"
             id="back-to-projects-nav-btn"
@@ -209,7 +250,7 @@ const ProjectDetail: React.FC = () => {
         </div>
       </header>
 
-      {/* ── Main Content ───────────────────────────────────────── */}
+      {/* ── Main Content ───────────────────────────────────────────── */}
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-8 md:py-12">
         {loading ? (
           <Skeleton />
@@ -217,7 +258,7 @@ const ProjectDetail: React.FC = () => {
           <NotFound />
         ) : (
           <article className="space-y-10 animate-fade-in-up">
-            {/* 1. Breadcrumb & Navigation */}
+            {/* 1. Breadcrumb */}
             <div className="flex items-center justify-between gap-4 flex-wrap pb-2 border-b border-eg/10">
               <nav className="flex items-center gap-2 font-mono-custom text-[11px] tracking-widest text-white/40 uppercase">
                 <Link to="/" className="hover:text-eg transition-colors duration-200">HOME</Link>
@@ -226,7 +267,6 @@ const ProjectDetail: React.FC = () => {
                 <span className="text-eg/40">/</span>
                 <span className="text-eg tracking-wider font-semibold truncate max-w-[180px] sm:max-w-xs">{project.title}</span>
               </nav>
-
               <Link
                 to="/#projects"
                 id="back-to-projects-top-btn"
@@ -236,7 +276,7 @@ const ProjectDetail: React.FC = () => {
               </Link>
             </div>
 
-            {/* 2. Large Project Hero / Thumbnail */}
+            {/* 2. Hero Thumbnail */}
             <div className="relative rounded-2xl overflow-hidden border border-eg/30 glass shadow-2xl bg-dark-300 group">
               {project.thumbnail_url ? (
                 <div className="w-full h-[320px] sm:h-[420px] md:h-[500px] overflow-hidden relative">
@@ -245,11 +285,9 @@ const ProjectDetail: React.FC = () => {
                     alt={project.title}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   />
-                  {/* Subtle Scan Line overlay */}
                   <div className="scan-line pointer-events-none" />
                 </div>
               ) : (
-                /* Fallback stylized futuristic card when thumbnail is null */
                 <div className="w-full h-[280px] sm:h-[380px] flex flex-col items-center justify-center bg-circuit relative p-6">
                   <div className="w-20 h-20 rounded-full border border-eg/40 bg-eg/10 flex items-center justify-center mb-4 shadow-eg-sm">
                     <span className="font-display text-eg text-2xl font-bold tracking-widest">ISO</span>
@@ -262,22 +300,14 @@ const ProjectDetail: React.FC = () => {
                   </p>
                 </div>
               )}
-
-              {/* Ambient Bottom Gradient */}
               <div
                 className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: 'linear-gradient(to bottom, transparent 40%, rgba(8,12,10,0.9) 100%)',
-                }}
+                style={{ background: 'linear-gradient(to bottom, transparent 40%, rgba(8,12,10,0.9) 100%)' }}
               />
-
-              {/* Futuristic HUD framing corners */}
               <div className="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-eg/70" />
               <div className="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-eg/70" />
               <div className="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-eg/70" />
               <div className="absolute bottom-4 right-4 w-6 h-6 border-b-2 border-r-2 border-eg/70" />
-
-              {/* Published badge overlay */}
               <div className="absolute top-6 left-6 flex items-center gap-2 bg-dark-100/90 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-eg/40 shadow-lg">
                 <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
                 <span className="font-mono-custom text-[10px] tracking-widest text-eg uppercase font-semibold">
@@ -286,7 +316,7 @@ const ProjectDetail: React.FC = () => {
               </div>
             </div>
 
-            {/* 3. Project Title & GitHub Action Header */}
+            {/* 3. Title & GitHub */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-eg/15">
               <div className="space-y-3 max-w-2xl">
                 <div className="flex items-center gap-2">
@@ -300,7 +330,6 @@ const ProjectDetail: React.FC = () => {
                 </h1>
               </div>
 
-              {/* GitHub Button (Graceful handling of null) */}
               {project.github_url ? (
                 <a
                   href={project.github_url}
@@ -321,7 +350,28 @@ const ProjectDetail: React.FC = () => {
               )}
             </div>
 
-            {/* 4. Short Project Introduction (Highlight Callout) */}
+            {/* 4. Creator + Date Row */}
+            {project.created_by && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <CreatorChip creatorId={project.created_by} />
+                {project.created_at && (
+                  <div className="flex items-center gap-2 glass rounded-2xl px-5 py-3 border border-white/10">
+                    <svg className="w-4 h-4 text-eg/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <div>
+                      <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase">UPLOADED</p>
+                      <p className="font-display text-sm font-semibold text-white">{formatDate(project.created_at)}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 5. Short Intro Callout */}
             {shortIntro && (
               <div className="glass rounded-2xl p-6 border-l-4 border-l-eg border-eg/20 bg-eg/5 relative overflow-hidden">
                 <p className="font-sans text-base sm:text-lg text-white/90 leading-relaxed italic font-light">
@@ -330,7 +380,7 @@ const ProjectDetail: React.FC = () => {
               </div>
             )}
 
-            {/* 5. Components & Tech Used Tags */}
+            {/* 6. Technologies */}
             {componentsList.length > 0 && (
               <div className="space-y-3">
                 <h3 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
@@ -351,7 +401,7 @@ const ProjectDetail: React.FC = () => {
               </div>
             )}
 
-            {/* 6. Full Description */}
+            {/* 7. Full Description */}
             <div className="space-y-3">
               <h3 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-eg" />
@@ -365,7 +415,7 @@ const ProjectDetail: React.FC = () => {
               </div>
             </div>
 
-            {/* 7. Responsive Image Gallery */}
+            {/* 8. Gallery */}
             <div className="space-y-4 pt-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
@@ -396,13 +446,11 @@ const ProjectDetail: React.FC = () => {
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                         loading="lazy"
                       />
-                      {/* Dark overlay & Hover Prompt */}
                       <div className="absolute inset-0 bg-dark-100/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2">
                         <span className="font-mono-custom text-[11px] text-eg tracking-widest border border-eg/50 px-3.5 py-1.5 rounded-lg bg-dark/90 shadow-lg">
                           VIEW FULL MEDIA ↗
                         </span>
                       </div>
-                      {/* Corner frames */}
                       <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-eg/60 opacity-0 group-hover:opacity-100 transition-opacity" />
                       <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-eg/60 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
@@ -410,9 +458,7 @@ const ProjectDetail: React.FC = () => {
                 </div>
               ) : (
                 <div className="glass rounded-2xl p-8 border border-white/5 text-center flex flex-col items-center justify-center gap-3">
-                  <div className="w-12 h-12 rounded-full border border-white/10 bg-dark-200/50 flex items-center justify-center text-white/30">
-                    📷
-                  </div>
+                  <div className="w-12 h-12 rounded-full border border-white/10 bg-dark-200/50 flex items-center justify-center text-white/30">📷</div>
                   <p className="font-mono-custom text-xs tracking-widest text-white/30 uppercase">
                     NO ADDITIONAL GALLERY MEDIA AVAILABLE FOR THIS PROJECT
                   </p>
@@ -420,7 +466,7 @@ const ProjectDetail: React.FC = () => {
               )}
             </div>
 
-            {/* 8. Bottom Navigation Footer */}
+            {/* 9. Bottom Nav */}
             <div className="pt-8 pb-4 border-t border-eg/15 flex items-center justify-between flex-wrap gap-4">
               <Link
                 to="/#projects"
@@ -430,7 +476,6 @@ const ProjectDetail: React.FC = () => {
                 <ArrowRight className="w-4 h-4 rotate-180" />
                 BACK TO ALL PROJECTS
               </Link>
-
               {project.github_url && (
                 <a
                   href={project.github_url}
@@ -447,7 +492,7 @@ const ProjectDetail: React.FC = () => {
         )}
       </main>
 
-      {/* Interactive Lightbox Modal */}
+      {/* Lightbox */}
       {selectedImageIndex !== null && galleryUrls.length > 0 && (
         <LightboxModal
           images={galleryUrls}
@@ -457,7 +502,7 @@ const ProjectDetail: React.FC = () => {
         />
       )}
 
-      {/* ── Footer ─────────────────────────────────────────────── */}
+      {/* Footer */}
       <footer className="border-t border-eg/10 py-6 mt-auto">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           <p className="font-mono-custom text-[10px] tracking-widest text-white/20 uppercase">

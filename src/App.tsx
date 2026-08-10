@@ -1,40 +1,85 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Navbar }     from './components/ui';
-import Hero           from './components/Hero';
-import AboutMission   from './components/AboutMission';
-import Projects       from './components/Projects';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { Navbar }      from './components/ui';
+import Hero            from './components/Hero';
+import AboutMission    from './components/AboutMission';
+import Projects        from './components/Projects';
 import Contact, { Footer } from './components/ContactFooter';
-import AdminLogin     from './pages/AdminLogin';
-import AdminDashboard from './pages/AdminDashboard';
-import ProjectDetail  from './pages/ProjectDetail';
-import ProtectedRoute from './components/ProtectedRoute';
-import Login          from './pages/Login';
-import Signup         from './pages/Signup';
-import UserDashboard  from './pages/UserDashboard';
+import AdminLogin      from './pages/AdminLogin';
+import AdminDashboard  from './pages/AdminDashboard';
+import ProjectDetail   from './pages/ProjectDetail';
+import ProtectedRoute  from './components/ProtectedRoute';
+import Login           from './pages/Login';
+import Signup          from './pages/Signup';
+import UserDashboard   from './pages/UserDashboard';
+import AuthCallback    from './pages/AuthCallback';
+import PublicProfile   from './pages/PublicProfile';
+import ProfileEdit     from './pages/ProfileEdit';
 
 /* ── Home page (single-page layout) ──────────────────────────────── */
-const HomePage: React.FC = () => (
-  <div className="min-h-screen bg-dark text-white overflow-x-hidden">
-    <Navbar />
-    <main>
-      <Hero />
-      <AboutMission />
-      <Projects />
-      <Contact />
-    </main>
-    <Footer />
-  </div>
-);
+import { supabase } from './lib/supabase';
+
+const HomePage: React.FC = () => {
+  const navigate = useNavigate();
+
+  // Detect Google OAuth redirect landing on home page.
+  // Supabase fires SIGNED_IN when it exchanges the OAuth tokens from the URL hash.
+  // We redirect the user to dashboard so they don't stay on the home page.
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          // Check role then redirect
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (profile?.role === 'admin') {
+            navigate('/admin', { replace: true });
+          } else {
+            navigate('/dashboard', { replace: true });
+          }
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-dark text-white overflow-x-hidden">
+      <Navbar />
+      <main>
+        <Hero />
+        <AboutMission />
+        <Projects />
+        <Contact />
+      </main>
+      <Footer />
+    </div>
+  );
+};
 
 /* ── App with router ─────────────────────────────────────────────── */
 const App: React.FC = () => (
   <BrowserRouter>
     <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/projects/:slug" element={<ProjectDetail />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      {/* Public routes */}
+      <Route path="/"                element={<HomePage />} />
+      <Route path="/projects/:slug"  element={<ProjectDetail />} />
+      <Route path="/login"           element={<Login />} />
+      <Route path="/signup"          element={<Signup />} />
+      <Route path="/admin/login"     element={<AdminLogin />} />
+
+      {/* Auth callback — handles Supabase email verification redirect */}
+      <Route path="/auth/callback"   element={<AuthCallback />} />
+
+      {/* Public creator profile page — no auth required */}
+      <Route path="/profile/:id"     element={<PublicProfile />} />
+
+      {/* Protected: authenticated user routes */}
       <Route
         path="/dashboard"
         element={
@@ -43,7 +88,16 @@ const App: React.FC = () => (
           </ProtectedRoute>
         }
       />
-      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route
+        path="/profile/edit"
+        element={
+          <ProtectedRoute>
+            <ProfileEdit />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Protected: admin-only routes */}
       <Route
         path="/admin"
         element={
@@ -52,6 +106,7 @@ const App: React.FC = () => (
           </ProtectedRoute>
         }
       />
+
       {/* Catch-all: redirect unknown paths to home */}
       <Route path="*" element={<HomePage />} />
     </Routes>
