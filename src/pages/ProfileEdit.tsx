@@ -9,7 +9,7 @@ const SOCIAL_PLATFORMS = ['github', 'twitter', 'linkedin', 'instagram', 'youtube
 
 const ProfileEdit: React.FC = () => {
   const navigate = useNavigate();
-  const { profile, loading: profileLoading } = useUserProfile();
+  const { profile, loading: profileLoading, refreshProfile } = useUserProfile();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
@@ -93,7 +93,7 @@ const ProfileEdit: React.FC = () => {
         avatarUrl = await uploadAvatar(profile.id);
       }
 
-      // Update profile — role is NOT in the update payload
+      // Update profile — role is NOT in the update payload (preserved by RLS WITH CHECK)
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -106,11 +106,64 @@ const ProfileEdit: React.FC = () => {
         })
         .eq('id', profile.id);
 
-      if (updateError) throw new Error(updateError.message);
+      if (updateError) {
+        console.error(
+          '[ProfileEdit] Supabase UPDATE failed.',
+          '\n→ Possible RLS issue: check "Users update own profile non-role fields" policy.',
+          '\n→ Error details:',
+          { code: updateError.code, message: updateError.message, details: updateError.details, hint: updateError.hint }
+        );
+        throw new Error(updateError.message);
+      }
+
+      // Re-fetch the saved row from Supabase to confirm persisted values.
+      // This is the authoritative source of truth — avoids stale in-memory state.
+      const { data: savedRow, error: refetchErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', profile.id)
+        .maybeSingle();
+
+      if (refetchErr) {
+        console.error(
+          '[ProfileEdit] Post-save re-fetch failed. The update likely succeeded but we cannot confirm.',
+          '\n→ Error details:',
+          { code: refetchErr.code, message: refetchErr.message, details: refetchErr.details, hint: refetchErr.hint }
+        );
+        // Still mark success — the update itself didn't error
+        setAvatarFile(null);
+        if (avatarUrl) setCurrentAvatar(avatarUrl);
+      } else if (savedRow) {
+        // Update all form fields from the DB-confirmed values
+        const saved = savedRow as typeof profile;
+        setFullName(saved.full_name || '');
+        setBio(saved.bio || '');
+        setAbout(saved.about || '');
+        setSocialLinks((saved.social_links as SocialLinks) || {});
+        setCurrentAvatar(saved.avatar_url || null);
+        setAvatarFile(null);
+        console.log('[ProfileEdit] Profile saved and verified from DB:', {
+          full_name: saved.full_name,
+          bio: saved.bio,
+          about: saved.about,
+          social_links: saved.social_links,
+          avatar_url: saved.avatar_url,
+        });
+      } else {
+        // Saved but re-fetch returned null — possible RLS gap
+        console.warn(
+          '[ProfileEdit] Post-save re-fetch returned null for id:', profile.id,
+          '\n→ Update succeeded but cannot read back the row.',
+          '\n→ Verify SELECT policy "Public can read profiles" exists on public.profiles.'
+        );
+        setAvatarFile(null);
+        if (avatarUrl) setCurrentAvatar(avatarUrl);
+      }
+
+      // Also trigger the hook to refresh in case other parts of the UI use it
+      await refreshProfile();
 
       setSuccess(true);
-      setAvatarFile(null);
-      if (avatarUrl) setCurrentAvatar(avatarUrl);
     } catch (err: unknown) {
       setError((err as Error)?.message || 'Failed to save profile. Please try again.');
     } finally {
