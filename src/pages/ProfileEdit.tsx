@@ -5,6 +5,9 @@ import { useUserProfile } from '../lib/hooks';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import type { SocialLinks } from '../lib/types';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUUID = (v?: string | null): v is string => !!v && UUID_REGEX.test(v);
+
 const SOCIAL_PLATFORMS = ['github', 'twitter', 'linkedin', 'instagram', 'youtube', 'website'] as const;
 
 const ProfileEdit: React.FC = () => {
@@ -109,32 +112,36 @@ const ProfileEdit: React.FC = () => {
       if (updateError) {
         console.error(
           '[ProfileEdit] Supabase UPDATE failed.',
-          '\n→ Possible RLS issue: check "Users update own profile non-role fields" policy.',
-          '\n→ Error details:',
+          '\n→ Profile ID used:', profile.id,
+          '\n→ Possible RLS issue: confirm "Users can update own profile" policy is active.',
+          '\n→ Full error:',
           { code: updateError.code, message: updateError.message, details: updateError.details, hint: updateError.hint }
         );
         throw new Error(updateError.message);
       }
 
-      // Re-fetch the saved row from Supabase to confirm persisted values.
-      // This is the authoritative source of truth — avoids stale in-memory state.
+      console.debug('[ProfileEdit] UPDATE succeeded for profile ID:', profile.id);
+
+      // Re-fetch the saved row to confirm the write was persisted.
+      // Using .single() so a missing row (PGRST116) is an explicit error.
       const { data: savedRow, error: refetchErr } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, full_name, email, avatar_url, bio, about, social_links, created_at, updated_at')
         .eq('id', profile.id)
-        .maybeSingle();
+        .single();
 
       if (refetchErr) {
         console.error(
-          '[ProfileEdit] Post-save re-fetch failed. The update likely succeeded but we cannot confirm.',
-          '\n→ Error details:',
+          '[ProfileEdit] Post-save re-fetch failed.',
+          '\n→ Profile ID:', profile.id,
+          '\n→ Error code:', refetchErr.code,
+          '\n→ This may mean the SELECT policy is missing for authenticated users.',
+          '\n→ Full error:',
           { code: refetchErr.code, message: refetchErr.message, details: refetchErr.details, hint: refetchErr.hint }
         );
-        // Still mark success — the update itself didn't error
         setAvatarFile(null);
         if (avatarUrl) setCurrentAvatar(avatarUrl);
       } else if (savedRow) {
-        // Update all form fields from the DB-confirmed values
         const saved = savedRow as typeof profile;
         setFullName(saved.full_name || '');
         setBio(saved.bio || '');
@@ -142,19 +149,19 @@ const ProfileEdit: React.FC = () => {
         setSocialLinks((saved.social_links as SocialLinks) || {});
         setCurrentAvatar(saved.avatar_url || null);
         setAvatarFile(null);
-        console.log('[ProfileEdit] Profile saved and verified from DB:', {
+        console.log('[ProfileEdit] Profile saved and confirmed from DB ✓', {
+          id: saved.id,
           full_name: saved.full_name,
           bio: saved.bio,
-          about: saved.about,
+          about: saved.about ? saved.about.substring(0, 40) + '…' : null,
           social_links: saved.social_links,
           avatar_url: saved.avatar_url,
         });
       } else {
-        // Saved but re-fetch returned null — possible RLS gap
         console.warn(
-          '[ProfileEdit] Post-save re-fetch returned null for id:', profile.id,
-          '\n→ Update succeeded but cannot read back the row.',
-          '\n→ Verify SELECT policy "Public can read profiles" exists on public.profiles.'
+          '[ProfileEdit] Post-save re-fetch returned no row for profile ID:', profile.id,
+          '\n→ The UPDATE succeeded but the SELECT returned nothing.',
+          '\n→ Verify the "Users can view own profile" SELECT policy is active.'
         );
         setAvatarFile(null);
         if (avatarUrl) setCurrentAvatar(avatarUrl);
@@ -207,12 +214,14 @@ const ProfileEdit: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              to={`/profile/${profile?.id}`}
-              className="font-mono-custom text-xs text-white/60 hover:text-eg transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10"
-            >
-              View Public Profile ↗
-            </Link>
+            {isValidUUID(profile?.id) && (
+              <Link
+                to={`/profile/${profile.id}`}
+                className="font-mono-custom text-xs text-white/60 hover:text-eg transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10"
+              >
+                View Public Profile ↗
+              </Link>
+            )}
             <Link
               to="/dashboard"
               className="font-mono-custom text-xs text-white/60 hover:text-eg transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10"
@@ -437,12 +446,16 @@ const ProfileEdit: React.FC = () => {
 
           {/* Save Button */}
           <div className="flex items-center justify-between flex-wrap gap-4 pb-4">
-            <Link
-              to={`/profile/${profile?.id}`}
-              className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors flex items-center gap-1.5"
-            >
-              ← View Public Profile
-            </Link>
+            {isValidUUID(profile?.id) ? (
+              <Link
+                to={`/profile/${profile.id}`}
+                className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors flex items-center gap-1.5"
+              >
+                ← View Public Profile
+              </Link>
+            ) : (
+              <span className="font-mono-custom text-xs text-white/20">Loading profile…</span>
+            )}
             <button
               type="submit"
               id="profile-save-btn"

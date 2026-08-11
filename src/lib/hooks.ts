@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from './supabase';
-import type { Project, ProjectGalleryItem, UserProfile, ProjectWithCreator } from './types';
+import type { Project, ProjectGalleryItem, UserProfile, ProjectWithCreator, SocialLinks } from './types';
 
 interface UseProjectsResult {
   projects: ProjectWithCreator[];
@@ -19,7 +19,7 @@ interface UseUserProfileResult {
   profile: UserProfile | null;
   loading: boolean;
   error: string | null;
-  /** Call this after saving the profile to re-fetch the latest row from Supabase. */
+  /** Re-fetch the profile from Supabase (call after saving changes). */
   refreshProfile: () => Promise<void>;
 }
 
@@ -35,9 +35,14 @@ interface UseCreatorProjectsResult {
   error: string | null;
 }
 
+// ─── UUID validation helper ──────────────────────────────────────────────────
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(value: string | undefined): boolean {
+  return !!value && UUID_REGEX.test(value);
+}
+
 /**
  * Fetches all published projects, joined with creator profile info.
- * Optionally filtered by a specific creator UUID.
  */
 export function useProjects(creatorId?: string): UseProjectsResult {
   const [projects, setProjects] = useState<ProjectWithCreator[]>([]);
@@ -62,43 +67,29 @@ export function useProjects(creatorId?: string): UseProjectsResult {
       }
 
       const { data, error: sbError } = await query;
-
       if (cancelled) return;
 
       if (sbError) {
-        console.error('[useProjects] Supabase error fetching projects:', sbError);
+        console.error('[useProjects] Supabase query error:', sbError);
         setError(sbError.message);
         setLoading(false);
         return;
       }
 
       const projectRows = (data as Project[]) ?? [];
-
-      // Fetch creator profiles for all unique created_by UUIDs
-      const creatorIds = [
-        ...new Set(
-          projectRows
-            .map((p) => p.created_by)
-            .filter(Boolean) as string[]
-        ),
-      ];
+      const creatorIds = [...new Set(projectRows.map((p) => p.created_by).filter(Boolean) as string[])];
 
       let creatorMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
-
       if (creatorIds.length > 0) {
-        const { data: profiles, error: profilesErr } = await supabase
+        const { data: profiles, error: profErr } = await supabase
           .from('profiles')
           .select('id, full_name, avatar_url')
           .in('id', creatorIds);
-
-        if (profilesErr) {
-          console.error('[useProjects] Supabase error fetching creator profiles:', profilesErr);
+        if (profErr) {
+          console.error('[useProjects] Error fetching creator profiles:', profErr);
         } else if (profiles) {
           for (const p of profiles) {
-            creatorMap[p.id] = {
-              full_name: p.full_name,
-              avatar_url: p.avatar_url,
-            };
+            creatorMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
           }
         }
       }
@@ -108,9 +99,7 @@ export function useProjects(creatorId?: string): UseProjectsResult {
       const enriched: ProjectWithCreator[] = projectRows.map((p) => ({
         ...p,
         creator_name: p.created_by ? (creatorMap[p.created_by]?.full_name ?? null) : null,
-        creator_avatar_url: p.created_by
-          ? (creatorMap[p.created_by]?.avatar_url ?? null)
-          : null,
+        creator_avatar_url: p.created_by ? (creatorMap[p.created_by]?.avatar_url ?? null) : null,
       }));
 
       setProjects(enriched);
@@ -125,7 +114,7 @@ export function useProjects(creatorId?: string): UseProjectsResult {
 }
 
 /**
- * Fetches a single published project by its slug along with gallery images.
+ * Fetches a single published project by slug, plus its gallery.
  */
 export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResult {
   const [project, setProject] = useState<Project | null>(null);
@@ -134,17 +123,13 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
   const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => {
-    if (!slug) {
-      setLoading(false);
-      return;
-    }
+    if (!slug) { setLoading(false); return; }
     let cancelled = false;
 
     async function fetchProjectData() {
       setLoading(true);
       setError(null);
 
-      // 1. Fetch project details
       const { data: projData, error: projError } = await supabase
         .from('projects')
         .select('*')
@@ -153,24 +138,16 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
         .maybeSingle();
 
       if (cancelled) return;
-
       if (projError) {
-        console.error('[useProjectBySlug] Supabase error fetching project:', projError);
+        console.error('[useProjectBySlug] Error fetching project:', projError);
         setError(projError.message);
         setLoading(false);
         return;
       }
-
-      if (!projData) {
-        setProject(null);
-        setGallery([]);
-        setLoading(false);
-        return;
-      }
+      if (!projData) { setProject(null); setGallery([]); setLoading(false); return; }
 
       setProject(projData as Project);
 
-      // 2. Fetch project gallery images
       const { data: galleryData, error: galleryError } = await supabase
         .from('project_gallery')
         .select('*')
@@ -178,14 +155,12 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
         .order('sort_order', { ascending: true, nullsFirst: false });
 
       if (cancelled) return;
-
       if (galleryError) {
-        console.warn('[useProjectBySlug] Failed to load gallery:', galleryError.message);
+        console.warn('[useProjectBySlug] Gallery load failed:', galleryError.message);
         setGallery([]);
       } else {
         setGallery((galleryData as ProjectGalleryItem[]) ?? []);
       }
-
       setLoading(false);
     }
 
@@ -197,149 +172,167 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
 }
 
 /**
- * Fetches current authenticated user profile from `profiles` table.
- * Returns a `refreshProfile` callback so callers can force a re-fetch
- * (e.g. immediately after saving profile changes).
+ * Fetches the currently authenticated user's profile from public.profiles.
+ *
+ * Uses supabase.auth.getUser() (server-validated) instead of getSession()
+ * to ensure the user ID is always authentic and not stale from local storage.
+ *
+ * Returns refreshProfile() so callers can force a re-fetch after saving.
  */
 export function useUserProfile(): UseUserProfileResult {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
 
-  // Stable fetch function — does NOT depend on component lifecycle flags
-  // so it can be called externally via refreshProfile.
+  /**
+   * Core fetch — always uses getUser() for a server-validated user ID.
+   * Returns null if unauthenticated; returns DB row or a minimal fallback.
+   */
   const fetchProfile = useCallback(async (): Promise<UserProfile | null> => {
-    const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
-    if (sessionErr) {
-      console.error('[useUserProfile] Failed to get session:', sessionErr);
+    // getUser() contacts the Supabase auth server to validate the token.
+    // This is intentional — stale sessions from getSession() would return a
+    // user.id that doesn't match auth.uid() server-side, causing RLS failures.
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+
+    if (userErr || !userData?.user) {
+      if (userErr) {
+        console.error(
+          '[useUserProfile] getUser() failed — user is not authenticated or token is invalid.',
+          { code: userErr.code, message: userErr.message }
+        );
+      }
       return null;
     }
 
-    const user = sessionData?.session?.user;
-    if (!user) {
-      return null;
-    }
+    const user = userData.user;
+    console.debug('[useUserProfile] Authenticated user ID:', user.id);
 
     const { data, error: fetchErr } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, full_name, email, avatar_url, role, bio, about, social_links, created_at, updated_at')
       .eq('id', user.id)
-      .maybeSingle();
+      .single();
 
     if (fetchErr) {
-      // Log the full error so we can diagnose RLS / column issues
       console.error(
-        '[useUserProfile] Supabase SELECT failed. ' +
-        'Check that "Public can read profiles" policy exists on public.profiles. ' +
-        'Error details:',
+        '[useUserProfile] SELECT from profiles failed.',
+        '\n→ Authenticated user ID:', user.id,
+        '\n→ Check that the "Users can view own profile" policy allows auth.uid() = id.',
+        '\n→ Full Supabase error:',
         { code: fetchErr.code, message: fetchErr.message, details: fetchErr.details, hint: fetchErr.hint }
       );
-      // Return a minimal fallback so the edit form can still function
+      // Return a minimal fallback so the edit page is not broken by a missing row.
+      // The fallback intentionally has blank bio/about/social_links so the user
+      // knows they need to fill in their profile.
       return {
         id: user.id,
-        full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'User',
-        email: user.email ?? '',
+        full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? null,
+        email: user.email ?? null,
         avatar_url: user.user_metadata?.avatar_url ?? null,
-        role: 'user',
+        role: 'user' as const,
         bio: null,
         about: null,
-        social_links: {},
+        social_links: {} as SocialLinks,
         created_at: user.created_at,
       };
     }
 
     if (!data) {
-      // Row does not exist yet (e.g. trigger hasn't run). Log so we can diagnose.
+      // No row found — trigger has not run or profile was manually deleted.
       console.warn(
-        '[useUserProfile] No profile row found for user:', user.id,
-        '— The handle_new_user trigger may not have run, or the profile was not yet created.'
+        '[useUserProfile] No profile row found for authenticated user:', user.id,
+        '\n→ The handle_new_user trigger may not have run.',
+        '\n→ Try inserting a row manually or logging out and back in.'
       );
       return {
         id: user.id,
-        full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'User',
-        email: user.email ?? '',
+        full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? null,
+        email: user.email ?? null,
         avatar_url: user.user_metadata?.avatar_url ?? null,
-        role: 'user',
+        role: 'user' as const,
         bio: null,
         about: null,
-        social_links: {},
+        social_links: {} as SocialLinks,
         created_at: user.created_at,
       };
     }
 
-    // Successfully got the DB row — use it as the authoritative source
-    return data as UserProfile;
-  }, []);
-
-  const loadProfile = useCallback(async (setLoadingState: boolean) => {
-    if (setLoadingState) setLoading(true);
-    setError(null);
-
-    try {
-      const result = await fetchProfile();
-      setProfile(result);
-    } catch (err: unknown) {
-      console.error('[useUserProfile] Unexpected error:', err);
-      setError((err as Error)?.message ?? 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchProfile]);
-
-  // Public refresh function — re-fetches and updates state without showing the loading spinner
-  const refreshProfile = useCallback(async () => {
-    await loadProfile(false);
-  }, [loadProfile]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    // Wrap loadProfile to respect cancellation
-    async function load() {
-      setLoading(true);
-      setError(null);
+    // Parse social_links — Supabase returns JSONB as a JS object, but cast for safety.
+    const row = data as UserProfile;
+    if (row.social_links && typeof row.social_links !== 'object') {
       try {
-        const result = await fetchProfile();
-        if (!cancelled) setProfile(result);
-      } catch (err: unknown) {
-        if (!cancelled) {
-          console.error('[useUserProfile] Unexpected error in effect:', err);
-          setError((err as Error)?.message ?? 'Unknown error');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+        row.social_links = JSON.parse(row.social_links as unknown as string) as SocialLinks;
+      } catch {
+        console.warn('[useUserProfile] Failed to parse social_links JSON:', row.social_links);
+        row.social_links = {};
       }
     }
 
-    load();
+    console.debug('[useUserProfile] Loaded profile from DB:', {
+      id: row.id,
+      full_name: row.full_name,
+      bio: row.bio,
+      about: row.about ? row.about.substring(0, 40) + '…' : null,
+      social_links: row.social_links,
+    });
 
-    // Re-fetch on any auth state change (sign-in, sign-out, token refresh, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!cancelled) {
-        if (session?.user) {
-          // Re-fetch fresh DB row
-          load();
-        } else {
-          // User signed out
-          setProfile(null);
-          setLoading(false);
-        }
+    return row;
+  }, []);
+
+  const runLoad = useCallback(async (cancelled: { value: boolean }, showSpinner: boolean) => {
+    if (showSpinner) setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchProfile();
+      if (!cancelled.value) {
+        setProfile(result);
+      }
+    } catch (err: unknown) {
+      if (!cancelled.value) {
+        console.error('[useUserProfile] Unexpected error during load:', err);
+        setError((err as Error)?.message ?? 'Unknown error');
+      }
+    } finally {
+      if (!cancelled.value) setLoading(false);
+    }
+  }, [fetchProfile]);
+
+  // Exported refresh — re-fetches without showing the loading spinner.
+  const refreshProfile = useCallback(async () => {
+    const cancelled = { value: false };
+    await runLoad(cancelled, false);
+  }, [runLoad]);
+
+  useEffect(() => {
+    const cancelled = { value: false };
+
+    runLoad(cancelled, true);
+
+    // Re-fetch on auth state changes (sign-in, token refresh, sign-out).
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled.value) return;
+      if (event === 'SIGNED_OUT' || !session) {
+        setProfile(null);
+        setLoading(false);
+      } else {
+        // SIGNED_IN, TOKEN_REFRESHED, INITIAL_SESSION, etc.
+        runLoad(cancelled, false);
       }
     });
 
     return () => {
-      cancelled = true;
+      cancelled.value = true;
       subscription.unsubscribe();
     };
-  }, [fetchProfile]);
+  }, [runLoad]);
 
   return { profile, loading, error, refreshProfile };
 }
 
 /**
- * Fetches a public profile by user UUID.
- * Used on the public /profile/:id page.
- * Only reads safe public fields — email and role are NOT included.
+ * Fetches a public profile by UUID for the /profile/:id page.
+ * Queries only safe public fields — email and role are excluded.
+ * Uses getUser() to log the authenticated user ID for debugging.
  */
 export function usePublicProfile(userId: string | undefined): UsePublicProfileResult {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -347,52 +340,89 @@ export function usePublicProfile(userId: string | undefined): UsePublicProfileRe
   const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId) {
+    // Validate the UUID before querying — prevents querying with "undefined" string
+    if (!userId || !isValidUUID(userId)) {
+      console.error(
+        '[usePublicProfile] Invalid or missing profile UUID from URL param:',
+        JSON.stringify(userId),
+        '\n→ Expected a valid UUID like "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx".',
+        '\n→ The "View Public Profile" link may have been clicked before profile loaded,',
+        '\n   or the ID was not set correctly in the navigation link.'
+      );
+      setProfile(null);
       setLoading(false);
       return;
     }
+
     let cancelled = false;
 
-    async function fetchProfile() {
+    async function fetchPublicProfile() {
       setLoading(true);
       setError(null);
+
+      console.debug('[usePublicProfile] Querying profiles.id =', userId);
 
       const { data, error: fetchErr } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url, bio, about, social_links, created_at')
         .eq('id', userId)
-        .maybeSingle();
+        .single();
 
       if (cancelled) return;
 
       if (fetchErr) {
-        // Full error details for diagnosis — most likely cause is missing
-        // "Public can read profiles" SELECT policy on public.profiles.
-        console.error(
-          '[usePublicProfile] Supabase SELECT failed for userId:', userId,
-          '\n→ If this is an RLS error, run the fix migration: 20260811_fix_profile_bugs.sql',
-          '\n→ Error details:',
-          { code: fetchErr.code, message: fetchErr.message, details: fetchErr.details, hint: fetchErr.hint }
-        );
-        setError(fetchErr.message);
+        // PGRST116 = "JSON object requested, multiple (or no) rows returned" from .single()
+        // This means the row genuinely doesn't exist, OR RLS blocked it.
+        if (fetchErr.code === 'PGRST116') {
+          console.warn(
+            '[usePublicProfile] No profile row found for UUID:', userId,
+            '\n→ Either the profile does not exist in public.profiles,',
+            '\n   OR the "Public can read profiles" SELECT policy is missing/inactive.',
+            '\n→ Run this in Supabase SQL Editor to check:',
+            '\n   SELECT policyname, cmd FROM pg_policies WHERE tablename = \'profiles\';'
+          );
+          setProfile(null);
+        } else {
+          console.error(
+            '[usePublicProfile] Supabase SELECT error for userId:', userId,
+            '\n→ Full error:',
+            { code: fetchErr.code, message: fetchErr.message, details: fetchErr.details, hint: fetchErr.hint }
+          );
+          setError(fetchErr.message);
+        }
         setLoading(false);
         return;
       }
 
       if (!data) {
-        // RLS-filtered (policy blocked the row) or the profile genuinely doesn't exist.
-        console.warn(
-          '[usePublicProfile] No profile row returned for userId:', userId,
-          '\n→ Possible causes: (1) No profile row exists, (2) RLS is blocking the read.',
-          '\n→ Verify that the "Public can read profiles" policy exists in Supabase.'
-        );
+        console.warn('[usePublicProfile] Query succeeded but returned null for UUID:', userId);
+        setProfile(null);
+        setLoading(false);
+        return;
       }
 
-      setProfile(data as UserProfile | null);
+      // Parse social_links JSONB safely
+      const row = data as UserProfile;
+      if (row.social_links && typeof row.social_links !== 'object') {
+        try {
+          row.social_links = JSON.parse(row.social_links as unknown as string) as SocialLinks;
+        } catch {
+          console.warn('[usePublicProfile] Failed to parse social_links JSON');
+          row.social_links = {};
+        }
+      }
+
+      console.debug('[usePublicProfile] Profile loaded:', {
+        id: row.id,
+        full_name: row.full_name,
+        bio: row.bio,
+      });
+
+      setProfile(row);
       setLoading(false);
     }
 
-    fetchProfile();
+    fetchPublicProfile();
     return () => { cancelled = true; };
   }, [userId]);
 
@@ -400,8 +430,7 @@ export function usePublicProfile(userId: string | undefined): UsePublicProfileRe
 }
 
 /**
- * Fetches all published projects by a given creator UUID.
- * Used on the public profile page to show their uploaded projects.
+ * Fetches all published projects by a creator UUID.
  */
 export function useCreatorProjects(creatorId: string | undefined): UseCreatorProjectsResult {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -409,7 +438,7 @@ export function useCreatorProjects(creatorId: string | undefined): UseCreatorPro
   const [error,    setError]    = useState<string | null>(null);
 
   useEffect(() => {
-    if (!creatorId) {
+    if (!creatorId || !isValidUUID(creatorId)) {
       setLoading(false);
       return;
     }
@@ -427,14 +456,12 @@ export function useCreatorProjects(creatorId: string | undefined): UseCreatorPro
         .order('created_at', { ascending: false });
 
       if (cancelled) return;
-
       if (sbError) {
         console.error('[useCreatorProjects] Supabase error:', sbError);
         setError(sbError.message);
         setLoading(false);
         return;
       }
-
       setProjects((data as Project[]) ?? []);
       setLoading(false);
     }

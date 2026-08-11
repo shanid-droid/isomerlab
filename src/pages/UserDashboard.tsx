@@ -5,6 +5,9 @@ import { useUserProfile } from '../lib/hooks';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import type { SocialLinks } from '../lib/types';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUUID = (v?: string | null): v is string => !!v && UUID_REGEX.test(v);
+
 const SOCIAL_ICONS: Record<string, React.ReactNode> = {
   github: (
     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -217,14 +220,16 @@ const UserDashboard: React.FC = () => {
                   </svg>
                   EDIT PROFILE
                 </Link>
-                <Link
-                  to={`/profile/${profile?.id}`}
-                  id="view-public-profile-btn"
-                  className="btn-outline py-2 px-5 text-xs flex items-center gap-2"
-                >
-                  VIEW PUBLIC PROFILE
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                {isValidUUID(profile?.id) && (
+                  <Link
+                    to={`/profile/${profile.id}`}
+                    id="view-public-profile-btn"
+                    className="btn-outline py-2 px-5 text-xs flex items-center gap-2"
+                  >
+                    VIEW PUBLIC PROFILE
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
               </div>
             </div>
           </div>
@@ -269,12 +274,16 @@ const UserDashboard: React.FC = () => {
             <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">
               PUBLIC PROFILE
             </p>
-            <Link
-              to={`/profile/${profile?.id}`}
-              className="font-mono-custom text-sm text-eg/80 hover:text-eg transition-colors font-medium flex items-center gap-1.5"
-            >
-              VIEW PROFILE ↗
-            </Link>
+            {isValidUUID(profile?.id) ? (
+              <Link
+                to={`/profile/${profile.id}`}
+                className="font-mono-custom text-sm text-eg/80 hover:text-eg transition-colors font-medium flex items-center gap-1.5"
+              >
+                VIEW PROFILE ↗
+              </Link>
+            ) : (
+              <span className="font-mono-custom text-sm text-white/20">Loading…</span>
+            )}
           </div>
         </div>
       </main>
