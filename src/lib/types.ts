@@ -54,6 +54,31 @@ export interface ProjectWithCreator extends Project {
   creator_avatar_url?: string | null;
 }
 
+export type ContactMessageStatus = 'unread' | 'read' | 'archived';
+
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  subject?: string | null;
+  message: string;
+  status: ContactMessageStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  actor_user_id?: string | null;
+  action: string;
+  target_type?: string | null;
+  target_id?: string | null;
+  details?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_at: string;
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -65,6 +90,12 @@ export type Database = {
       };
       profiles: {
         Row: UserProfile;
+      };
+      contact_messages: {
+        Row: ContactMessage;
+      };
+      activity_logs: {
+        Row: ActivityLog;
       };
     };
   };

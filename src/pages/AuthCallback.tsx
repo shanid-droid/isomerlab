@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo } from '../components/ui';
+import { logAuthEvent } from '../lib/activityLog';
 
 /**
  * /auth/callback
@@ -24,6 +25,28 @@ const AuthCallback: React.FC = () => {
       if (!isMounted) return;
 
       if (event === 'SIGNED_IN' && session?.user) {
+        const provider = session.user.app_metadata?.provider;
+        const isGoogle = provider === 'google';
+        const createdAt = new Date(session.user.created_at).getTime();
+        const isNewUser = Date.now() - createdAt < 60_000;
+
+        if (isGoogle && isNewUser) {
+          await logAuthEvent('google_oauth_registration', {
+            email: session.user.email ?? undefined,
+            provider: 'google',
+          });
+        } else if (isGoogle) {
+          await logAuthEvent('google_oauth_login', {
+            email: session.user.email ?? undefined,
+            provider: 'google',
+          });
+        } else {
+          await logAuthEvent('user_login', {
+            email: session.user.email ?? undefined,
+            method: 'email_verification',
+          });
+        }
+
         // Ensure profile exists (may have been created by trigger already)
         try {
           await supabase.from('profiles').upsert(

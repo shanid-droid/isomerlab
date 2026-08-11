@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
+import { logAuthEvent } from '../lib/activityLog';
 
 const AdminLogin: React.FC = () => {
   const navigate = useNavigate();
@@ -83,12 +84,14 @@ const AdminLogin: React.FC = () => {
     });
 
     if (authError) {
+      await logAuthEvent('failed_login', { email: email.trim(), method: 'admin_login' });
       setError(authError.message);
       setLoading(false);
       return;
     }
 
     if (data.session?.user) {
+      await logAuthEvent('user_login', { email: data.session.user.email ?? email.trim(), method: 'admin_login' });
       await handleRoleRedirect(data.session.user.id);
     } else {
       setLoading(false);

@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useUserProfile } from '../lib/hooks';
 import { IsomerLogo, ArrowRight } from '../components/ui';
+import { logAuthEvent } from '../lib/activityLog';
 import type { SocialLinks } from '../lib/types';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,6 +38,7 @@ const UserDashboard: React.FC = () => {
   const { profile, loading, error } = useUserProfile();
 
   const handleLogout = async () => {
+    await logAuthEvent('user_logout', { email: profile?.email ?? undefined, method: 'user_dashboard' });
     await supabase.auth.signOut();
     navigate('/login', { replace: true });
   };

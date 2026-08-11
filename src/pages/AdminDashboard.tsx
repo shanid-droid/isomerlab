@@ -1,10 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo } from '../components/ui';
 import type { Project, ProjectGalleryItem, UserProfile } from '../lib/types';
+import OwnerOverview from '../components/admin/OwnerOverview';
+import ContactInbox from '../components/admin/ContactInbox';
+import ActivityLogsPanel from '../components/admin/ActivityLogsPanel';
+import { logAuthEvent } from '../lib/activityLog';
 
 export const OWNER_ID = '9d5d6287-1843-4cd0-afee-fc1830411571';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Open the existing public profile page in a new tab using profiles.id */
+function openPublicProfileInNewTab(userId: string) {
+  if (!UUID_REGEX.test(userId)) return;
+  window.open(`/profile/${userId}`, '_blank', 'noopener,noreferrer');
+}
+
+const ExternalLinkIcon: React.FC<{ className?: string }> = ({ className = 'w-3 h-3' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+type AdminTab = 'overview' | 'projects' | 'users' | 'inbox' | 'activity';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -17,7 +37,8 @@ const AdminDashboard: React.FC = () => {
   const isOwner = currentUserId === OWNER_ID;
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'projects' | 'users'>('projects');
+  const [activeTab, setActiveTab] = useState<AdminTab>('projects');
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
 
   // Projects State
   const [projects, setProjects] = useState<Project[]>([]);
@@ -172,12 +193,35 @@ const AdminDashboard: React.FC = () => {
     }
   }, [checkingAuth, isOwner, currentUserId]);
 
+  const initialTabSet = useRef(false);
+
   // Tab protection safeguard for ordinary admins
   useEffect(() => {
-    if (!isOwner && activeTab === 'users') {
+    if (!isOwner && (activeTab === 'users' || activeTab === 'overview' || activeTab === 'inbox' || activeTab === 'activity')) {
       setActiveTab('projects');
     }
   }, [isOwner, activeTab]);
+
+  // Default owner to overview tab on first load only
+  useEffect(() => {
+    if (isOwner && !checkingAuth && !initialTabSet.current) {
+      initialTabSet.current = true;
+      setActiveTab('overview');
+    }
+  }, [isOwner, checkingAuth]);
+
+  // Fetch inbox unread count for tab badge (owner only)
+  useEffect(() => {
+    if (!isOwner || checkingAuth) return;
+    async function fetchUnreadCount() {
+      const { data } = await supabase
+        .from('contact_messages')
+        .select('status')
+        .eq('status', 'unread');
+      setInboxUnreadCount(data?.length ?? 0);
+    }
+    fetchUnreadCount();
+  }, [isOwner, checkingAuth, activeTab]);
 
   // Handle Role Change Execution (Owner Only)
   const handleConfirmRoleChange = async () => {
@@ -220,6 +264,7 @@ const AdminDashboard: React.FC = () => {
 
   // 3. Logout action
   const handleLogout = async () => {
+    await logAuthEvent('user_logout', { email: userEmail ?? undefined, method: 'admin_console' });
     setUserEmail(null);
     setCurrentUserId(null);
     await supabase.auth.signOut();
@@ -676,7 +721,19 @@ const AdminDashboard: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
         
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-3 border-b border-eg/10 pb-4">
+        <div className="flex items-center gap-3 border-b border-eg/10 pb-4 flex-wrap">
+          {isOwner && (
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+                activeTab === 'overview'
+                  ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                  : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              ◈ OVERVIEW
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('projects')}
             className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
@@ -688,18 +745,64 @@ const AdminDashboard: React.FC = () => {
             📁 PROJECTS ({projects.length})
           </button>
           {isOwner && (
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
-                activeTab === 'users'
-                  ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
-                  : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
-              }`}
-            >
-              👥 USER MANAGEMENT ({usersList.length})
-            </button>
+            <>
+              <button
+                onClick={() => setActiveTab('inbox')}
+                className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+                  activeTab === 'inbox'
+                    ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                    : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                ✉ MESSAGES
+                {inboxUnreadCount > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full bg-eg text-dark text-[9px] font-bold min-w-[18px] text-center">
+                    {inboxUnreadCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('activity')}
+                className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+                  activeTab === 'activity'
+                    ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                    : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                📋 ACTIVITY LOGS
+              </button>
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+                  activeTab === 'users'
+                    ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                    : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                👥 USER MANAGEMENT ({usersList.length})
+              </button>
+            </>
           )}
         </div>
+
+        {/* ── OVERVIEW TAB (Owner only) ───────────────────────────── */}
+        {activeTab === 'overview' && isOwner && (
+          <OwnerOverview
+            projectCount={totalCount}
+            onNavigateToInbox={() => setActiveTab('inbox')}
+            onNavigateToActivity={() => setActiveTab('activity')}
+          />
+        )}
+
+        {/* ── INBOX TAB (Owner only) ──────────────────────────────── */}
+        {activeTab === 'inbox' && isOwner && (
+          <ContactInbox onCountsChange={c => setInboxUnreadCount(c.unread)} />
+        )}
+
+        {/* ── ACTIVITY LOGS TAB (Owner only) ──────────────────────── */}
+        {activeTab === 'activity' && isOwner && (
+          <ActivityLogsPanel />
+        )}
 
         {activeTab === 'projects' && (
           <div className="space-y-8">
@@ -1096,7 +1199,18 @@ const AdminDashboard: React.FC = () => {
                               </span>
                             </td>
                             <td className="py-4 px-6 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-2 flex-wrap">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openPublicProfileInNewTab(u.id);
+                                  }}
+                                  title="View public profile in new tab"
+                                  className="px-3 py-1.5 rounded border border-eg/40 text-eg hover:bg-eg/10 transition-colors text-[10px] tracking-wider flex items-center gap-1.5"
+                                >
+                                  <ExternalLinkIcon />
+                                  VIEW PUBLIC PROFILE
+                                </button>
                                 <button
                                   onClick={() => setSelectedUser(u)}
                                   className="px-3 py-1.5 rounded border border-white/20 text-white/70 hover:text-white hover:bg-white/10 transition-colors text-[10px] tracking-wider"
@@ -1549,12 +1663,20 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Footer Action Bar */}
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-eg/10">
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-eg/10 flex-wrap">
               <button
                 onClick={() => setSelectedUser(null)}
                 className="px-4 py-2 rounded-lg font-mono-custom text-xs text-white/60 hover:text-white transition-colors"
               >
                 CLOSE
+              </button>
+
+              <button
+                onClick={() => openPublicProfileInNewTab(selectedUser.id)}
+                className="px-4 py-2 rounded-lg border border-eg/40 bg-eg/10 text-eg hover:bg-eg/20 font-mono-custom text-xs tracking-wider transition-colors flex items-center gap-1.5"
+              >
+                <ExternalLinkIcon className="w-3.5 h-3.5" />
+                VIEW PUBLIC PROFILE
               </button>
 
               {selectedUser.role === 'user' ? (

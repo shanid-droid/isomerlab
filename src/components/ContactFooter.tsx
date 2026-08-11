@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight } from './ui';
+import { supabase } from '../lib/supabase';
 
 /* ── Intersection-observer hook ─────────────────────────────────── */
 function useVisible(threshold = 0.15) {
@@ -12,6 +13,8 @@ function useVisible(threshold = 0.15) {
   }, [threshold]);
   return { ref, vis };
 }
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* ── Social icons ─────────────────────────────────────────────────── */
 const SocialIcon: React.FC<{ href: string; label: string; children: React.ReactNode }> = ({
@@ -33,21 +36,54 @@ const SocialIcon: React.FC<{ href: string; label: string; children: React.ReactN
 /* ── Contact section ────────────────────────────────────────────── */
 const Contact: React.FC = () => {
   const { ref, vis } = useVisible(0.1);
-  const [formData, setFormData]   = useState({ name: '', email: '', message: '' });
+  const [formData, setFormData]   = useState({ name: '', email: '', subject: '', message: '' });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    if (error) setError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const name = formData.name.trim();
+    const email = formData.email.trim();
+    const message = formData.message.trim();
+    const subject = formData.subject.trim() || null;
+
+    if (!name || !email || !message) {
+      setError('Please fill in all required fields.');
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setError(null);
+
+    try {
+      const { error: insertError } = await supabase
+        .from('contact_messages')
+        .insert({ name, email, subject, message });
+
+      if (insertError) throw insertError;
+      setFormData({ name: '', email: '', subject: '', message: '' });
       setSubmitted(true);
-    }, 1200);
+    } catch {
+      setError('Unable to send your message. Please try again.');
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
+    }
   };
 
   const inputClass = `w-full bg-dark-200/60 border border-eg/15 rounded px-4 py-3
@@ -99,13 +135,19 @@ const Contact: React.FC = () => {
                     <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
-                <h3 className="font-display text-sm tracking-widest text-white mb-2">MESSAGE SENT</h3>
+                <h3 className="font-display text-sm tracking-widest text-white mb-2">MESSAGE SENT SUCCESSFULLY</h3>
                 <p className="font-sans text-xs text-white/40">
-                  We'll get back to you shortly. Stay focused.
+                  Message sent successfully. We'll get back to you shortly.
                 </p>
               </div>
             ) : (
-              <form id="contact-form" onSubmit={handleSubmit} className="space-y-5">
+              <form id="contact-form" onSubmit={handleSubmit} className="space-y-5" noValidate>
+                {error && (
+                  <div className="p-3 rounded border border-red-500/40 bg-red-500/10">
+                    <p className="font-mono-custom text-xs text-red-300">{error}</p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
                     <label htmlFor="contact-name" className="block font-mono-custom text-[10px] tracking-widest text-eg/60 uppercase mb-2">
@@ -137,6 +179,21 @@ const Contact: React.FC = () => {
                       className={inputClass}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label htmlFor="contact-subject" className="block font-mono-custom text-[10px] tracking-widest text-eg/60 uppercase mb-2">
+                    Subject <span className="text-white/30 normal-case">(optional)</span>
+                  </label>
+                  <input
+                    id="contact-subject"
+                    name="subject"
+                    type="text"
+                    placeholder="What's this about?"
+                    value={formData.subject}
+                    onChange={handleChange}
+                    className={inputClass}
+                  />
                 </div>
 
                 <div>

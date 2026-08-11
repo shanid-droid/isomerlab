@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase, siteUrl } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
+import { logAuthEvent } from '../lib/activityLog';
 
 const Signup: React.FC = () => {
   const navigate = useNavigate();
@@ -94,6 +95,7 @@ const Signup: React.FC = () => {
 
     if (data.session) {
       // Email confirmation not required — session created immediately
+      await logAuthEvent('user_registered', { email: email.trim(), method: 'password' });
       // Ensure profile row exists
       try {
         await supabase.from('profiles').upsert(
