@@ -7,6 +7,7 @@ import OwnerOverview from '../components/admin/OwnerOverview';
 import ContactInbox from '../components/admin/ContactInbox';
 import ActivityLogsPanel from '../components/admin/ActivityLogsPanel';
 import { logAuthEvent } from '../lib/activityLog';
+import ThumbnailPromptSection from '../components/ThumbnailPromptSection';
 
 export const OWNER_ID = '9d5d6287-1843-4cd0-afee-fc1830411571';
 
@@ -1416,6 +1417,12 @@ const AdminDashboard: React.FC = () => {
                     />
                   </label>
                 </div>
+
+                <ThumbnailPromptSection
+                  projectName={formTitle}
+                  projectDescription={formDescription}
+                  hasProductImage={!!(formThumbnailFile || formThumbnailPreview)}
+                />
               </div>
 
               {/* Gallery Image Uploads */}
