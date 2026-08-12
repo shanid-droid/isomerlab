@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProjectBySlug } from '../lib/hooks';
 import { supabase } from '../lib/supabase';
@@ -204,6 +204,47 @@ const ProjectDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const { project, gallery, loading, error } = useProjectBySlug(slug);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
+
+  const alignHeroUnderHeader = useCallback(() => {
+    const hero = heroRef.current;
+    const header = headerRef.current;
+    if (!hero || !header) return;
+
+    const headerHeight = header.getBoundingClientRect().height;
+
+    // Layout position (unaffected by the article fade-in transform)
+    let heroDocumentTop = 0;
+    let el: HTMLElement | null = hero;
+    while (el) {
+      heroDocumentTop += el.offsetTop;
+      el = el.offsetParent as HTMLElement | null;
+    }
+
+    const targetScroll = heroDocumentTop - headerHeight;
+
+    window.scrollTo({
+      top: Math.max(0, targetScroll),
+      left: 0,
+      behavior: 'instant',
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (loading || !project || !heroRef.current || !headerRef.current) return;
+
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    alignHeroUnderHeader();
+
+    const hero = heroRef.current;
+    const img = hero.querySelector('img');
+    if (!img || img.complete) return undefined;
+
+    const onLoad = () => alignHeroUnderHeader();
+    img.addEventListener('load', onLoad, { once: true });
+    return () => img.removeEventListener('load', onLoad);
+  }, [slug, loading, project?.id, alignHeroUnderHeader]);
 
   const parseComponents = (compData: string[] | string | null | undefined): string[] => {
     if (!compData) return [];
@@ -234,7 +275,7 @@ const ProjectDetail: React.FC = () => {
   return (
     <div className="min-h-screen bg-dark bg-circuit text-white flex flex-col selection:bg-eg/30">
       {/* ── Sticky Header ──────────────────────────────────────────── */}
-      <header className="glass-dark border-b border-eg/10 py-4 sticky top-0 z-40 backdrop-blur-xl">
+      <header ref={headerRef} className="glass-dark border-b border-eg/10 py-4 sticky top-0 z-40 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           <Link to="/" className="focus:outline-none">
             <IsomerLogo size="md" />
@@ -277,7 +318,7 @@ const ProjectDetail: React.FC = () => {
             </div>
 
             {/* 2. Hero Thumbnail */}
-            <div className="relative rounded-2xl overflow-hidden border border-eg/30 glass shadow-2xl bg-dark-300 group">
+            <div ref={heroRef} className="relative rounded-2xl overflow-hidden border border-eg/30 glass shadow-2xl bg-dark-300 group">
               {project.thumbnail_url ? (
                 <div className="w-full h-[320px] sm:h-[420px] md:h-[500px] overflow-hidden relative">
                   <img

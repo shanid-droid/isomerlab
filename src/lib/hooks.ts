@@ -132,7 +132,18 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
 
       const { data: projData, error: projError } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+          id,
+          title,
+          slug,
+          description,
+          thumbnail_url,
+          components,
+          github_url,
+          published,
+          created_by,
+          created_at
+        `)
         .eq('slug', slug)
         .eq('published', true)
         .maybeSingle();
