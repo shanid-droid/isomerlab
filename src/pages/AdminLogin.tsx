@@ -25,6 +25,8 @@ const AdminLogin: React.FC = () => {
 
       if (!error && profile?.role === 'admin') {
         navigate('/admin', { replace: true });
+      } else if (profile?.role === 'creator') {
+        navigate('/creator', { replace: true });
       } else {
         navigate('/dashboard', { replace: true });
       }

@@ -1,10 +1,11 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { useUserProfile } from '../lib/hooks';
+import { useUserProfile, useCreatorApplication } from '../lib/hooks';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import { logAuthEvent } from '../lib/activityLog';
 import type { SocialLinks } from '../lib/types';
+import { isAdminRole, isCreatorRole, isOwner, formatRoleLabel } from '../lib/roles';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isValidUUID = (v?: string | null): v is string => !!v && UUID_REGEX.test(v);
@@ -36,6 +37,7 @@ const SOCIAL_ICONS: Record<string, React.ReactNode> = {
 const UserDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { profile, loading, error } = useUserProfile();
+  const { application, loading: appLoading } = useCreatorApplication();
 
   const handleLogout = async () => {
     await logAuthEvent('user_logout', { email: profile?.email ?? undefined, method: 'user_dashboard' });
@@ -73,7 +75,7 @@ const UserDashboard: React.FC = () => {
   const socialLinks = (profile?.social_links || {}) as SocialLinks;
   const socialEntries = Object.entries(socialLinks).filter(([, v]) => v);
 
-  if (loading) {
+  if (loading || appLoading) {
     return (
       <div className="min-h-screen bg-dark bg-circuit flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -115,6 +117,15 @@ const UserDashboard: React.FC = () => {
                 className="font-mono-custom text-xs text-eg hover:bg-eg/10 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-eg/40 bg-eg/5"
               >
                 Admin Console ↗
+              </Link>
+            )}
+
+            {isCreatorRole(profile?.role) && (
+              <Link
+                to="/creator"
+                className="font-mono-custom text-xs text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-purple-500/40 bg-purple-500/5"
+              >
+                Creator Dashboard ↗
               </Link>
             )}
 
@@ -176,7 +187,7 @@ const UserDashboard: React.FC = () => {
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-eg/30 bg-eg/10 mb-2">
                   <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
                   <span className="font-mono-custom text-[10px] tracking-widest text-eg uppercase">
-                    ROLE: {profile?.role?.toUpperCase() || 'USER'}
+                    ROLE: {formatRoleLabel(profile?.role)}
                   </span>
                 </div>
                 <h1 className="font-display text-2xl md:text-3xl font-bold tracking-wide text-white">
@@ -230,6 +241,31 @@ const UserDashboard: React.FC = () => {
                   >
                     VIEW PUBLIC PROFILE
                     <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+
+                {/* Creator application / dashboard actions */}
+                {!isOwner(profile) && !isAdminRole(profile?.role) && !isCreatorRole(profile?.role) && (
+                  application?.status === 'pending' ? (
+                    <span className="btn-outline py-2 px-5 text-xs flex items-center gap-2 opacity-60 cursor-default border-amber-500/30 text-amber-400">
+                      APPLICATION PENDING
+                    </span>
+                  ) : (
+                    <Link
+                      to="/apply-creator"
+                      className="btn-outline py-2 px-5 text-xs flex items-center gap-2 border-purple-500/40 text-purple-400 hover:bg-purple-500/10"
+                    >
+                      BECOME A CREATOR
+                    </Link>
+                  )
+                )}
+
+                {isCreatorRole(profile?.role) && (
+                  <Link
+                    to="/creator"
+                    className="btn-primary py-2 px-5 text-xs flex items-center gap-2"
+                  >
+                    CREATOR DASHBOARD
                   </Link>
                 )}
               </div>

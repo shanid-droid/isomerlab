@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useUserProfile } from '../lib/hooks';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import type { SocialLinks } from '../lib/types';
+import { formatRoleLabel } from '../lib/roles';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isValidUUID = (v?: string | null): v is string => !!v && UUID_REGEX.test(v);
@@ -372,7 +373,7 @@ const ProfileEdit: React.FC = () => {
                   ROLE <span className="text-white/20">(read-only)</span>
                 </label>
                 <div className="w-full bg-dark-200/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/30 font-mono-custom cursor-not-allowed">
-                  {profile?.role?.toUpperCase() || 'USER'}
+                  {formatRoleLabel(profile?.role)}
                 </div>
               </div>
               <div className="space-y-1.5">

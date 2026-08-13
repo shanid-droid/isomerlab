@@ -2,15 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { UserRole } from '../lib/types';
+import { OWNER_ID } from '../lib/constants';
+import { isAdminRole, isCreatorRole } from '../lib/roles';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requireAdmin?: boolean;
+  requireCreator?: boolean;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  requireAdmin = false,
+  requireCreator = false,
+}) => {
   const [session, setSession] = useState<any>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,14 +31,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
           if (isMounted) {
             setSession(null);
             setUserRole(null);
+            setUserId(null);
             setLoading(false);
           }
           return;
         }
 
-        if (isMounted) setSession(session);
+        if (isMounted) {
+          setSession(session);
+          setUserId(session.user.id);
+        }
 
-        // Fetch user profile role from public.profiles table using auth.uid() (session.user.id)
         let fetchedRole: UserRole = 'user';
         try {
           const { data: profile, error } = await supabase
@@ -39,8 +50,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
             .eq('id', session.user.id)
             .maybeSingle();
 
-          if (!error && profile?.role === 'admin') {
-            fetchedRole = 'admin';
+          if (!error && profile?.role) {
+            fetchedRole = profile.role as UserRole;
           }
         } catch (err) {
           console.warn('[ProtectedRoute] Profile query notice:', err);
@@ -50,7 +61,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
           setUserRole(fetchedRole);
           setLoading(false);
         }
-      } catch (err) {
+      } catch {
         if (isMounted) {
           setUserRole('user');
           setLoading(false);
@@ -65,6 +76,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
         if (!session) {
           setSession(null);
           setUserRole(null);
+          setUserId(null);
           setLoading(false);
         } else {
           checkAuthAndRole();
@@ -91,13 +103,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     );
   }
 
-  // 1. Unauthenticated users
   if (!session?.user) {
     return <Navigate to={requireAdmin ? "/admin/login" : "/login"} replace />;
   }
 
-  // 2. Authenticated non-admin attempting admin route
-  if (requireAdmin && userRole !== 'admin') {
+  if (requireAdmin && !isAdminRole(userRole) && userId !== OWNER_ID) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (requireCreator && !isCreatorRole(userRole)) {
     return <Navigate to="/dashboard" replace />;
   }
 

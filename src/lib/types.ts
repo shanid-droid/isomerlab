@@ -23,7 +23,11 @@ export interface ProjectGalleryItem {
   created_at?: string;
 }
 
-export type UserRole = 'user' | 'admin';
+export type UserRole = 'user' | 'admin' | 'creator';
+
+export type CreatorApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+export type CreatorRequirementStatus = 'pending' | 'completed' | 'review_required';
 
 export interface SocialLinks {
   twitter?: string;
@@ -44,8 +48,44 @@ export interface UserProfile {
   bio?: string | null;
   about?: string | null;
   social_links?: SocialLinks | null;
+  creator_approved_at?: string | null;
+  first_project_uploaded_at?: string | null;
+  creator_requirement_status?: CreatorRequirementStatus | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface CreatorApplication {
+  id: string;
+  user_id: string;
+  full_name: string;
+  age: number;
+  profession: string;
+  applicant_role: string;
+  bio: string;
+  skills: string;
+  education?: string | null;
+  location?: string | null;
+  github_url?: string | null;
+  portfolio_url?: string | null;
+  linkedin_url?: string | null;
+  other_url?: string | null;
+  motivation: string;
+  project_types: string;
+  status: CreatorApplicationStatus;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  rejection_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SiteSettings {
+  id: number;
+  maintenance_mode: boolean;
+  maintenance_message: string | null;
+  updated_at?: string;
+  updated_by?: string | null;
 }
 
 /** Project with creator profile info joined in */
@@ -96,6 +136,12 @@ export type Database = {
       };
       activity_logs: {
         Row: ActivityLog;
+      };
+      creator_applications: {
+        Row: CreatorApplication;
+      };
+      site_settings: {
+        Row: SiteSettings;
       };
     };
   };

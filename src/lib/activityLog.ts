@@ -79,6 +79,13 @@ export function formatActivityAction(action: string): string {
     contact_message_archived: 'Contact message archived',
     contact_message_deleted: 'Contact message deleted',
     contact_message_status_changed: 'Contact message status changed',
+    creator_application_submitted: 'Creator application submitted',
+    creator_application_approved: 'Creator application approved',
+    creator_application_rejected: 'Creator application rejected',
+    creator_project_uploaded: 'Creator project uploaded',
+    creator_requirement_completed: 'Creator requirement completed',
+    maintenance_mode_enabled: 'Maintenance mode enabled',
+    maintenance_mode_disabled: 'Maintenance mode disabled',
   };
   if (labels[action]) return labels[action];
   return action
@@ -114,10 +121,20 @@ export const ACTION_FILTER_GROUPS: { key: string; label: string; actions: string
     label: 'Contact',
     actions: ['contact_form_submitted', 'contact_message_read', 'contact_message_unread', 'contact_message_archived', 'contact_message_deleted'],
   },
+  {
+    key: 'creator',
+    label: 'Creator',
+    actions: ['creator_application_submitted', 'creator_application_approved', 'creator_application_rejected', 'creator_project_uploaded', 'creator_requirement_completed'],
+  },
+  {
+    key: 'system',
+    label: 'System',
+    actions: ['maintenance_mode_enabled', 'maintenance_mode_disabled'],
+  },
 ];
 
 /** Category filter for activity logs */
-export type ActivityCategory = 'all' | 'auth' | 'profile' | 'project' | 'admin' | 'contact';
+export type ActivityCategory = 'all' | 'auth' | 'profile' | 'project' | 'admin' | 'contact' | 'creator' | 'system';
 
 export function getActivityCategory(action: string, targetType?: string | null): ActivityCategory {
   if (action.startsWith('user_') && (action.includes('login') || action.includes('logout') || action.includes('registered') || action.includes('oauth') || action.includes('failed'))) {
@@ -127,6 +144,10 @@ export function getActivityCategory(action: string, targetType?: string | null):
   if (action.startsWith('project_')) return 'project';
   if (action.includes('promoted') || action.includes('demoted') || action.includes('role_changed')) return 'admin';
   if (action.startsWith('contact_')) return 'contact';
+  if (action.startsWith('creator_')) return 'creator';
+  if (action.startsWith('maintenance_')) return 'system';
+  if (targetType === 'creator_application') return 'creator';
+  if (targetType === 'site_settings') return 'system';
   if (targetType === 'auth') return 'auth';
   if (targetType === 'profile') return 'profile';
   if (targetType === 'project') return 'project';
@@ -177,6 +198,16 @@ export function formatActivitySummary(
       if (name && subject) return `From: ${name} — ${subject}`;
       if (email && subject) return `From: ${email} — ${subject}`;
       return name ?? email ?? 'Contact message';
+    case 'creator_application_submitted':
+    case 'creator_application_approved':
+    case 'creator_application_rejected':
+      return fullName ?? email ?? 'Creator application';
+    case 'creator_project_uploaded':
+    case 'creator_requirement_completed':
+      return title ? `Project: ${title}` : fullName ?? 'Creator activity';
+    case 'maintenance_mode_enabled':
+    case 'maintenance_mode_disabled':
+      return 'Site maintenance mode changed';
     default:
       return email ?? name ?? title ?? subject ?? '';
   }

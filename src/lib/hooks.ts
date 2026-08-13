@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from './supabase';
-import type { Project, ProjectGalleryItem, UserProfile, ProjectWithCreator, SocialLinks } from './types';
+import type { Project, ProjectGalleryItem, UserProfile, ProjectWithCreator, SocialLinks, CreatorApplication } from './types';
 
 interface UseProjectsResult {
   projects: ProjectWithCreator[];
@@ -220,7 +220,7 @@ export function useUserProfile(): UseUserProfileResult {
 
     const { data, error: fetchErr } = await supabase
       .from('profiles')
-      .select('id, full_name, email, avatar_url, role, bio, about, social_links, created_at, updated_at')
+      .select('id, full_name, email, avatar_url, role, bio, about, social_links, creator_approved_at, first_project_uploaded_at, creator_requirement_status, created_at, updated_at')
       .eq('id', user.id)
       .single();
 
@@ -482,4 +482,56 @@ export function useCreatorProjects(creatorId: string | undefined): UseCreatorPro
   }, [creatorId]);
 
   return { projects, loading, error };
+}
+
+interface UseCreatorApplicationResult {
+  application: CreatorApplication | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+}
+
+/** Fetches the current user's most recent creator application (if any). */
+export function useCreatorApplication(): UseCreatorApplicationResult {
+  const [application, setApplication] = useState<CreatorApplication | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchApplication = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setApplication(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error: sbError } = await supabase
+        .from('creator_applications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sbError) {
+        setError(sbError.message);
+        setApplication(null);
+      } else {
+        setApplication(data as CreatorApplication | null);
+      }
+    } catch (err: unknown) {
+      setError((err as Error)?.message ?? 'Failed to load application');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchApplication();
+  }, [fetchApplication]);
+
+  return { application, loading, error, refresh: fetchApplication };
 }

@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import { logAuthEvent } from '../lib/activityLog';
+import { getPostLoginPath } from '../lib/roles';
+import type { UserRole } from '../lib/types';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -39,8 +41,8 @@ const Login: React.FC = () => {
         .eq('id', userId)
         .maybeSingle();
 
-      if (!error && profile?.role === 'admin') {
-        navigate('/admin', { replace: true });
+      if (!error && profile?.role) {
+        navigate(getPostLoginPath(profile.role as UserRole, userId), { replace: true });
       } else {
         navigate('/dashboard', { replace: true });
       }

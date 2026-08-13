@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo } from '../components/ui';
 import { logAuthEvent } from '../lib/activityLog';
+import { getPostLoginPath } from '../lib/roles';
+import type { UserRole } from '../lib/types';
 
 /**
  * /auth/callback
@@ -75,11 +77,7 @@ const AuthCallback: React.FC = () => {
           .maybeSingle();
 
         if (isMounted) {
-          if (profile?.role === 'admin') {
-            navigate('/admin', { replace: true });
-          } else {
-            navigate('/dashboard', { replace: true });
-          }
+          navigate(getPostLoginPath(profile?.role as UserRole | undefined, session.user.id), { replace: true });
         }
       } else if (event === 'PASSWORD_RECOVERY') {
         // Password reset flow — send to dashboard where they can update
@@ -100,11 +98,7 @@ const AuthCallback: React.FC = () => {
           .eq('id', session.user.id)
           .maybeSingle();
         if (isMounted) {
-          if (profile?.role === 'admin') {
-            navigate('/admin', { replace: true });
-          } else {
-            navigate('/dashboard', { replace: true });
-          }
+          navigate(getPostLoginPath(profile?.role as UserRole | undefined, session.user.id), { replace: true });
         }
       } else {
         if (isMounted) {

@@ -8,8 +8,19 @@ import ContactInbox from '../components/admin/ContactInbox';
 import ActivityLogsPanel from '../components/admin/ActivityLogsPanel';
 import { logAuthEvent } from '../lib/activityLog';
 import ThumbnailPromptSection from '../components/ThumbnailPromptSection';
+import CreatorApplicationsPanel from '../components/admin/CreatorApplicationsPanel';
+import SiteControlPanel from '../components/admin/SiteControlPanel';
+import { OWNER_ID } from '../lib/constants';
+import {
+  formatRoleLabel,
+  getRoleBadgeClasses,
+  isCreatorRole,
+  isNormalUser,
+  normalizeUserRole,
+  isAdminRole,
+} from '../lib/roles';
 
-export const OWNER_ID = '9d5d6287-1843-4cd0-afee-fc1830411571';
+export { OWNER_ID };
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,7 +36,7 @@ const ExternalLinkIcon: React.FC<{ className?: string }> = ({ className = 'w-3 h
   </svg>
 );
 
-type AdminTab = 'overview' | 'projects' | 'users' | 'inbox' | 'activity';
+type AdminTab = 'overview' | 'projects' | 'users' | 'inbox' | 'activity' | 'applications' | 'site-control';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -55,7 +66,7 @@ const AdminDashboard: React.FC = () => {
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [roleModalUser, setRoleModalUser] = useState<UserProfile | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [targetNewRole, setTargetNewRole] = useState<'user' | 'admin' | null>(null);
+  const [targetNewRole, setTargetNewRole] = useState<'user' | 'admin' | 'creator' | null>(null);
   const [updatingRole, setUpdatingRole] = useState(false);
 
   // Modal States
@@ -176,7 +187,11 @@ const AdminDashboard: React.FC = () => {
       if (error) {
         setUsersDbError(error.message);
       } else {
-        setUsersList((data as UserProfile[]) || []);
+        const rows = ((data as UserProfile[]) || []).map((u) => ({
+          ...u,
+          role: normalizeUserRole(u.role),
+        }));
+        setUsersList(rows);
       }
     } catch (err: any) {
       setUsersDbError(err.message || 'Failed to load user profiles');
@@ -198,7 +213,7 @@ const AdminDashboard: React.FC = () => {
 
   // Tab protection safeguard for ordinary admins
   useEffect(() => {
-    if (!isOwner && (activeTab === 'users' || activeTab === 'overview' || activeTab === 'inbox' || activeTab === 'activity')) {
+    if (!isOwner && (activeTab === 'users' || activeTab === 'overview' || activeTab === 'inbox' || activeTab === 'activity' || activeTab === 'site-control')) {
       setActiveTab('projects');
     }
   }, [isOwner, activeTab]);
@@ -784,6 +799,28 @@ const AdminDashboard: React.FC = () => {
               </button>
             </>
           )}
+          <button
+            onClick={() => setActiveTab('applications')}
+            className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+              activeTab === 'applications'
+                ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            ✦ CREATOR APPLICATIONS
+          </button>
+          {isOwner && (
+            <button
+              onClick={() => setActiveTab('site-control')}
+              className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+                activeTab === 'site-control'
+                  ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                  : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              ⚙ SITE CONTROL
+            </button>
+          )}
         </div>
 
         {/* ── OVERVIEW TAB (Owner only) ───────────────────────────── */}
@@ -803,6 +840,16 @@ const AdminDashboard: React.FC = () => {
         {/* ── ACTIVITY LOGS TAB (Owner only) ──────────────────────── */}
         {activeTab === 'activity' && isOwner && (
           <ActivityLogsPanel />
+        )}
+
+        {/* ── CREATOR APPLICATIONS TAB (Owner + Admin) ─────────────── */}
+        {activeTab === 'applications' && (
+          <CreatorApplicationsPanel isOwner={isOwner} />
+        )}
+
+        {/* ── SITE CONTROL TAB (Owner only) ────────────────────────── */}
+        {activeTab === 'site-control' && isOwner && (
+          <SiteControlPanel />
         )}
 
         {activeTab === 'projects' && (
@@ -1074,7 +1121,7 @@ const AdminDashboard: React.FC = () => {
         {activeTab === 'users' && isOwner && (
           <div className="space-y-6">
             {/* Users Banner */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div className="glass rounded-xl p-5 border border-eg/15 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-16 h-16 bg-eg/5 rounded-bl-full pointer-events-none" />
                 <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">
@@ -1089,7 +1136,7 @@ const AdminDashboard: React.FC = () => {
                   ADMINISTRATORS
                 </p>
                 <p className="font-display text-3xl font-bold text-eg text-glow-sm">
-                  {usersList.filter((u) => u.role === 'admin').length}
+                  {usersList.filter((u) => isAdminRole(u.role)).length}
                 </p>
               </div>
 
@@ -1099,7 +1146,17 @@ const AdminDashboard: React.FC = () => {
                   NORMAL MEMBERS
                 </p>
                 <p className="font-display text-3xl font-bold text-blue-300">
-                  {usersList.filter((u) => u.role === 'user').length}
+                  {usersList.filter((u) => isNormalUser(u.role)).length}
+                </p>
+              </div>
+
+              <div className="glass rounded-xl p-5 border border-eg/15 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-purple-500/10 rounded-bl-full pointer-events-none" />
+                <p className="font-mono-custom text-[10px] tracking-widest text-purple-400 uppercase mb-1">
+                  CREATORS
+                </p>
+                <p className="font-display text-3xl font-bold text-purple-300">
+                  {usersList.filter((u) => isCreatorRole(u.role)).length}
                 </p>
               </div>
             </div>
@@ -1190,13 +1247,9 @@ const AdminDashboard: React.FC = () => {
                             </td>
                             <td className="py-4 px-6">
                               <span
-                                className={`inline-block px-2.5 py-1 rounded text-[10px] uppercase tracking-wider font-semibold border ${
-                                  u.role === 'admin'
-                                    ? 'bg-eg/10 border-eg/40 text-eg'
-                                    : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
-                                }`}
+                                className={`inline-block px-2.5 py-1 rounded text-[10px] uppercase tracking-wider font-semibold border ${getRoleBadgeClasses(u.role)}`}
                               >
-                                {u.role}
+                                {formatRoleLabel(u.role)}
                               </span>
                             </td>
                             <td className="py-4 px-6 text-right">
@@ -1218,7 +1271,14 @@ const AdminDashboard: React.FC = () => {
                                 >
                                   DETAILS
                                 </button>
-                                {u.role === 'user' ? (
+                                {u.id === OWNER_ID ? (
+                                  <button
+                                    disabled
+                                    className="px-3 py-1.5 rounded border border-white/10 text-white/20 cursor-not-allowed opacity-40 text-[10px] tracking-wider"
+                                  >
+                                    SYSTEM OWNER
+                                  </button>
+                                ) : isNormalUser(u.role) ? (
                                   <button
                                     onClick={() => {
                                       setRoleModalUser(u);
@@ -1228,24 +1288,27 @@ const AdminDashboard: React.FC = () => {
                                   >
                                     PROMOTE TO ADMIN
                                   </button>
-                                ) : (
+                                ) : isCreatorRole(u.role) ? (
                                   <button
-                                    disabled={u.id === OWNER_ID}
                                     onClick={() => {
-                                      if (u.id === OWNER_ID) return;
                                       setRoleModalUser(u);
                                       setTargetNewRole('user');
                                     }}
-                                    title={u.id === OWNER_ID ? "Owner role cannot be changed" : "Demote to User"}
-                                    className={`px-3 py-1.5 rounded border text-[10px] tracking-wider transition-colors ${
-                                      u.id === OWNER_ID
-                                        ? 'border-white/10 text-white/20 cursor-not-allowed opacity-40'
-                                        : 'border-amber-500/40 text-amber-300 hover:bg-amber-500/10'
-                                    }`}
+                                    className="px-3 py-1.5 rounded border border-purple-500/40 text-purple-300 hover:bg-purple-500/10 transition-colors text-[10px] tracking-wider"
                                   >
-                                    {u.id === OWNER_ID ? 'SYSTEM OWNER' : 'DEMOTE TO USER'}
+                                    REMOVE CREATOR
                                   </button>
-                                )}
+                                ) : u.role === 'admin' ? (
+                                  <button
+                                    onClick={() => {
+                                      setRoleModalUser(u);
+                                      setTargetNewRole('user');
+                                    }}
+                                    className="px-3 py-1.5 rounded border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition-colors text-[10px] tracking-wider"
+                                  >
+                                    DEMOTE TO USER
+                                  </button>
+                                ) : null}
                               </div>
                             </td>
                           </tr>
@@ -1623,13 +1686,9 @@ const AdminDashboard: React.FC = () => {
                 </p>
                 <div className="mt-2">
                   <span
-                    className={`inline-block px-2.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold border ${
-                      selectedUser.role === 'admin'
-                        ? 'bg-eg/10 border-eg/40 text-eg'
-                        : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
-                    }`}
+                    className={`inline-block px-2.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold border ${getRoleBadgeClasses(selectedUser.role)}`}
                   >
-                    ROLE: {selectedUser.role}
+                    ROLE: {formatRoleLabel(selectedUser.role)}
                   </span>
                 </div>
               </div>
@@ -1686,7 +1745,14 @@ const AdminDashboard: React.FC = () => {
                 VIEW PUBLIC PROFILE
               </button>
 
-              {selectedUser.role === 'user' ? (
+              {selectedUser.id === OWNER_ID ? (
+                <button
+                  disabled
+                  className="px-4 py-2 rounded-lg border border-white/10 text-white/20 cursor-not-allowed opacity-40 font-mono-custom text-xs tracking-wider"
+                >
+                  SYSTEM OWNER
+                </button>
+              ) : isNormalUser(selectedUser.role) ? (
                 <button
                   onClick={() => {
                     const u = selectedUser;
@@ -1698,26 +1764,31 @@ const AdminDashboard: React.FC = () => {
                 >
                   PROMOTE TO ADMIN
                 </button>
-              ) : (
+              ) : isCreatorRole(selectedUser.role) ? (
                 <button
-                  disabled={selectedUser.id === OWNER_ID}
                   onClick={() => {
-                    if (selectedUser.id === OWNER_ID) return;
                     const u = selectedUser;
                     setSelectedUser(null);
                     setRoleModalUser(u);
                     setTargetNewRole('user');
                   }}
-                  title={selectedUser.id === OWNER_ID ? "Owner role cannot be changed" : "Demote user to normal role"}
-                  className={`px-4 py-2 rounded-lg border font-mono-custom text-xs tracking-wider transition-colors ${
-                    selectedUser.id === OWNER_ID
-                      ? 'border-white/10 text-white/20 cursor-not-allowed opacity-40'
-                      : 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
-                  }`}
+                  className="px-4 py-2 rounded-lg border border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 font-mono-custom text-xs tracking-wider transition-colors"
                 >
-                  {selectedUser.id === OWNER_ID ? 'SYSTEM OWNER' : 'DEMOTE TO USER'}
+                  REMOVE CREATOR
                 </button>
-              )}
+              ) : selectedUser.role === 'admin' ? (
+                <button
+                  onClick={() => {
+                    const u = selectedUser;
+                    setSelectedUser(null);
+                    setRoleModalUser(u);
+                    setTargetNewRole('user');
+                  }}
+                  className="px-4 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 font-mono-custom text-xs tracking-wider transition-colors"
+                >
+                  DEMOTE TO USER
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1744,7 +1815,7 @@ const AdminDashboard: React.FC = () => {
             <p className="font-sans text-xs text-white/80 leading-relaxed">
               Are you sure you want to change the role of{' '}
               <span className="font-semibold text-white">{roleModalUser.full_name || roleModalUser.email}</span> to{' '}
-              <span className="font-bold text-eg uppercase">{targetNewRole}</span>?
+              <span className="font-bold text-eg uppercase">{formatRoleLabel(targetNewRole)}</span>?
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2">
