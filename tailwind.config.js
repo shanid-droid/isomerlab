@@ -52,6 +52,8 @@ export default {
         'float':      'float 6s ease-in-out infinite',
         'scan':       'scan 3s linear infinite',
         'glitch':     'glitch 2s steps(1) infinite',
+        'like-pop':   'like-pop 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both',
+        'unlike-pop': 'unlike-pop 0.3s ease-out both',
       },
       keyframes: {
         float: {
@@ -68,6 +70,18 @@ export default {
           '94%':           { transform: 'translate(2px, -1px)' },
           '96%':           { transform: 'translate(-1px, 2px)' },
           '98%':           { transform: 'translate(1px, -2px)' },
+        },
+        'like-pop': {
+          '0%':   { transform: 'scale(1)' },
+          '30%':  { transform: 'scale(1.45)' },
+          '50%':  { transform: 'scale(0.92)' },
+          '70%':  { transform: 'scale(1.18)' },
+          '100%': { transform: 'scale(1)' },
+        },
+        'unlike-pop': {
+          '0%':   { transform: 'scale(1)' },
+          '40%':  { transform: 'scale(0.78)' },
+          '100%': { transform: 'scale(1)' },
         },
       },
       borderColor: {

@@ -4,6 +4,8 @@ import { useProjectBySlug } from '../lib/hooks';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import type { UserProfile } from '../lib/types';
+import { LikeButton } from '../components/LikeButton';
+import { ProjectCommentsSection } from '../components/ProjectCommentsSection';
 
 /* ── GitHub Icon Component ───────────────────────────────────────── */
 const GithubIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -391,24 +393,28 @@ const ProjectDetail: React.FC = () => {
               )}
             </div>
 
-            {/* 4. Creator + Date Row */}
+            {/* 4. Creator + Date + Likes Row */}
             {project.created_by && (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <CreatorChip creatorId={project.created_by} />
-                {project.created_at && (
-                  <div className="flex items-center gap-2 glass rounded-2xl px-5 py-3 border border-white/10">
-                    <svg className="w-4 h-4 text-eg/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
-                    <div>
-                      <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase">UPLOADED</p>
-                      <p className="font-display text-sm font-semibold text-white">{formatDate(project.created_at)}</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <CreatorChip creatorId={project.created_by} />
+                  {project.created_at && (
+                    <div className="flex items-center gap-2 glass rounded-2xl px-5 py-3 border border-white/10">
+                      <svg className="w-4 h-4 text-eg/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                      <div>
+                        <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase">UPLOADED</p>
+                        <p className="font-display text-sm font-semibold text-white">{formatDate(project.created_at)}</p>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+
+                <LikeButton projectId={project.id} />
               </div>
             )}
 
@@ -506,6 +512,9 @@ const ProjectDetail: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* 8.5 Comments Section */}
+            <ProjectCommentsSection projectId={project.id} projectOwnerId={project.created_by} />
 
             {/* 9. Bottom Nav */}
             <div className="pt-8 pb-4 border-t border-eg/15 flex items-center justify-between flex-wrap gap-4">

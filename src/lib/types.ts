@@ -55,6 +55,32 @@ export interface ProjectGalleryItem {
   created_at?: string;
 }
 
+export interface ProjectLike {
+  id: string;
+  project_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface ProjectComment {
+  id: string;
+  project_id: string;
+  user_id: string;
+  parent_comment_id?: string | null;
+  content: string;
+  is_pinned?: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string | null;
+}
+
+export interface ProjectCommentWithProfile extends ProjectComment {
+  author_name?: string | null;
+  author_avatar_url?: string | null;
+  author_role?: UserRole;
+  replies?: ProjectCommentWithProfile[];
+}
+
 export type UserRole = 'user' | 'admin' | 'creator';
 
 export type CreatorApplicationStatus = 'pending' | 'approved' | 'rejected';
