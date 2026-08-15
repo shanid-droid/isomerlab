@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import NotificationBell from './NotificationBell';
 
 /* ── ISOMER Logo mark ──────────────────────────────────────────── */
 export const IsomerLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
@@ -103,6 +104,8 @@ export const Navbar: React.FC = () => {
 
         {/* CTA & User Portal link */}
         <div className="hidden md:flex items-center gap-4">
+          <NotificationBell publicOnly />
+
           <Link
             to={hasSession ? "/dashboard" : "/login"}
             className="font-mono-custom text-xs text-white/70 hover:text-eg transition-colors px-3 py-1.5 rounded border border-white/10"
@@ -120,17 +123,20 @@ export const Navbar: React.FC = () => {
           </button>
         </div>
 
-        {/* Mobile hamburger */}
-        <button
-          id="mobile-menu-toggle"
-          aria-label="Toggle navigation menu"
-          className="md:hidden flex flex-col gap-1.5 p-2"
-          onClick={() => setMenuOpen(v => !v)}
-        >
-          <span className={`block w-6 h-px bg-white transition-all duration-300 ${menuOpen ? 'rotate-45 translate-y-2.5' : ''}`} />
-          <span className={`block w-6 h-px bg-white transition-all duration-300 ${menuOpen ? 'opacity-0' : ''}`} />
-          <span className={`block w-6 h-px bg-white transition-all duration-300 ${menuOpen ? '-rotate-45 -translate-y-2.5' : ''}`} />
-        </button>
+        {/* Mobile bell & hamburger */}
+        <div className="md:hidden flex items-center gap-2">
+          <NotificationBell publicOnly />
+          <button
+            id="mobile-menu-toggle"
+            aria-label="Toggle navigation menu"
+            className="flex flex-col gap-1.5 p-2"
+            onClick={() => setMenuOpen(v => !v)}
+          >
+            <span className={`block w-6 h-px bg-white transition-all duration-300 ${menuOpen ? 'rotate-45 translate-y-2.5' : ''}`} />
+            <span className={`block w-6 h-px bg-white transition-all duration-300 ${menuOpen ? 'opacity-0' : ''}`} />
+            <span className={`block w-6 h-px bg-white transition-all duration-300 ${menuOpen ? '-rotate-45 -translate-y-2.5' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Mobile drawer */}

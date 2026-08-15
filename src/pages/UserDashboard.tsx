@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useUserProfile, useCreatorApplication } from '../lib/hooks';
 import { IsomerLogo, ArrowRight } from '../components/ui';
+import ProfileNotifications from '../components/ProfileNotifications';
 import { logAuthEvent } from '../lib/activityLog';
 import type { SocialLinks } from '../lib/types';
 import { isAdminRole, isCreatorRole, isOwner, formatRoleLabel } from '../lib/roles';
@@ -287,7 +288,8 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Profile Meta Info Grid */}
+        {/* Notifications Section */}
+        <ProfileNotifications userRole={profile?.role} />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-dark-200/60 p-4 rounded-xl border border-white/5">
             <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">

@@ -10,6 +10,7 @@ import { logAuthEvent } from '../lib/activityLog';
 import ThumbnailPromptSection from '../components/ThumbnailPromptSection';
 import CreatorApplicationsPanel from '../components/admin/CreatorApplicationsPanel';
 import SiteControlPanel from '../components/admin/SiteControlPanel';
+import NotificationsPanel from '../components/admin/NotificationsPanel';
 import { OWNER_ID } from '../lib/constants';
 import {
   formatRoleLabel,
@@ -36,7 +37,7 @@ const ExternalLinkIcon: React.FC<{ className?: string }> = ({ className = 'w-3 h
   </svg>
 );
 
-type AdminTab = 'overview' | 'projects' | 'users' | 'inbox' | 'activity' | 'applications' | 'site-control';
+type AdminTab = 'overview' | 'projects' | 'users' | 'inbox' | 'activity' | 'applications' | 'site-control' | 'notifications';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -216,6 +217,7 @@ const AdminDashboard: React.FC = () => {
     if (!isOwner && (activeTab === 'users' || activeTab === 'overview' || activeTab === 'inbox' || activeTab === 'activity' || activeTab === 'site-control')) {
       setActiveTab('projects');
     }
+    // notifications tab is open to all admins — no guard needed
   }, [isOwner, activeTab]);
 
   // Default owner to overview tab on first load only
@@ -821,6 +823,17 @@ const AdminDashboard: React.FC = () => {
               ⚙ SITE CONTROL
             </button>
           )}
+          {/* Notifications — visible to all admins (owner + admin) */}
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+              activeTab === 'notifications'
+                ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            🔔 NOTIFICATIONS
+          </button>
         </div>
 
         {/* ── OVERVIEW TAB (Owner only) ───────────────────────────── */}
@@ -847,9 +860,14 @@ const AdminDashboard: React.FC = () => {
           <CreatorApplicationsPanel isOwner={isOwner} />
         )}
 
-        {/* ── SITE CONTROL TAB (Owner only) ────────────────────────── */}
+        {/* ── SITE CONTROL TAB (Owner only) ──────────────────────────────── */}
         {activeTab === 'site-control' && isOwner && (
           <SiteControlPanel />
+        )}
+
+        {/* ── NOTIFICATIONS TAB (Owner + Admin) ────────────────────────── */}
+        {activeTab === 'notifications' && (
+          <NotificationsPanel />
         )}
 
         {activeTab === 'projects' && (

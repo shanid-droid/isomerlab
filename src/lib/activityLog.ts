@@ -86,6 +86,10 @@ export function formatActivityAction(action: string): string {
     creator_requirement_completed: 'Creator requirement completed',
     maintenance_mode_enabled: 'Maintenance mode enabled',
     maintenance_mode_disabled: 'Maintenance mode disabled',
+    notification_created: 'Notification created',
+    notification_updated: 'Notification updated',
+    notification_deleted: 'Notification deleted',
+    notification_read: 'Notification read',
   };
   if (labels[action]) return labels[action];
   return action
@@ -131,10 +135,15 @@ export const ACTION_FILTER_GROUPS: { key: string; label: string; actions: string
     label: 'System',
     actions: ['maintenance_mode_enabled', 'maintenance_mode_disabled'],
   },
+  {
+    key: 'notifications',
+    label: 'Notifications',
+    actions: ['notification_created', 'notification_updated', 'notification_deleted', 'notification_read'],
+  },
 ];
 
 /** Category filter for activity logs */
-export type ActivityCategory = 'all' | 'auth' | 'profile' | 'project' | 'admin' | 'contact' | 'creator' | 'system';
+export type ActivityCategory = 'all' | 'auth' | 'profile' | 'project' | 'admin' | 'contact' | 'creator' | 'system' | 'notifications';
 
 export function getActivityCategory(action: string, targetType?: string | null): ActivityCategory {
   if (action.startsWith('user_') && (action.includes('login') || action.includes('logout') || action.includes('registered') || action.includes('oauth') || action.includes('failed'))) {
@@ -146,6 +155,7 @@ export function getActivityCategory(action: string, targetType?: string | null):
   if (action.startsWith('contact_')) return 'contact';
   if (action.startsWith('creator_')) return 'creator';
   if (action.startsWith('maintenance_')) return 'system';
+  if (action.startsWith('notification_')) return 'notifications';
   if (targetType === 'creator_application') return 'creator';
   if (targetType === 'site_settings') return 'system';
   if (targetType === 'auth') return 'auth';

@@ -2,6 +2,38 @@
    Mirrors columns consumed by the frontend.
 ──────────────────────────────────────────────────────────────── */
 
+export type NotificationType = 'public' | 'private' | 'creators' | 'all_creators';
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  notification_type: NotificationType;
+  recipient_id: string | null;
+  recipient_user_id?: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+  is_active: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface NotificationRead {
+  id: string;
+  notification_id: string;
+  user_id: string;
+  read_at: string;
+}
+
+export interface NotificationWithRead extends Notification {
+  is_read: boolean;
+  /** Display name of the sender (joined client-side) */
+  sender_name?: string | null;
+  /** Display name of the private recipient (joined client-side) */
+  recipient_name?: string | null;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -142,6 +174,12 @@ export type Database = {
       };
       site_settings: {
         Row: SiteSettings;
+      };
+      notifications: {
+        Row: Notification;
+      };
+      notification_reads: {
+        Row: NotificationRead;
       };
     };
   };

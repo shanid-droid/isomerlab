@@ -18,6 +18,7 @@ import PublicProfile   from './pages/PublicProfile';
 import ProfileEdit     from './pages/ProfileEdit';
 import ApplyCreator    from './pages/ApplyCreator';
 import CreatorDashboard from './pages/CreatorDashboard';
+import NotificationsPage from './pages/Notifications';
 import { supabase } from './lib/supabase';
 import { getPostLoginPath } from './lib/roles';
 
@@ -77,6 +78,14 @@ const App: React.FC = () => (
         <Route path="/profile/:id"     element={<PublicProfile />} />
 
         {/* Protected: authenticated user routes */}
+        <Route
+          path="/notifications"
+          element={
+            <ProtectedRoute>
+              <NotificationsPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={
