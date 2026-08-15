@@ -6,6 +6,7 @@ import { IsomerLogo, ArrowRight } from '../components/ui';
 import type { UserProfile } from '../lib/types';
 import { LikeButton } from '../components/LikeButton';
 import { ProjectCommentsSection } from '../components/ProjectCommentsSection';
+import { recordProjectView } from '../lib/leaderboardHooks';
 
 /* ── GitHub Icon Component ───────────────────────────────────────── */
 const GithubIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -208,6 +209,10 @@ const ProjectDetail: React.FC = () => {
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const headerRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    recordProjectView(project?.id);
+  }, [project?.id]);
 
   const alignHeroUnderHeader = useCallback(() => {
     const hero = heroRef.current;
