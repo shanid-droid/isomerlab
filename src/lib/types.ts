@@ -183,6 +183,123 @@ export interface ActivityLog {
   created_at: string;
 }
 
+/* ── Leaderboard ─────────────────────────────────────────────────── */
+
+export type LeaderboardType = 'project' | 'creator';
+export type LeaderboardPeriod = 'all_time' | 'monthly' | 'weekly';
+export type LeaderboardVisibility = 'public' | 'creators' | 'admins' | 'none';
+export type LeaderboardStatus = 'draft' | 'published' | 'unpublished';
+
+export interface LeaderboardSettings {
+  id: number;
+  enabled: boolean;
+  project_enabled: boolean;
+  creator_enabled: boolean;
+  visibility: LeaderboardVisibility;
+
+  project_like_weight: number;
+  project_comment_weight: number;
+  project_view_weight: number;
+  github_bonus: number;
+  gallery_bonus: number;
+  description_bonus: number;
+  tags_bonus: number;
+  recency_half_life_days: number;
+  recency_floor: number;
+
+  creator_project_weight: number;
+  creator_like_weight: number;
+  creator_comment_weight: number;
+  creator_activity_weight: number;
+  creator_top10_bonus: number;
+  creator_top3_bonus: number;
+  creator_comment_activity_points: number;
+  creator_like_activity_points: number;
+
+  max_scored_comments_per_project: number;
+  min_projects_for_creator: number;
+  min_score_to_rank: number;
+
+  all_time_enabled: boolean;
+  monthly_enabled: boolean;
+  weekly_enabled: boolean;
+
+  updated_at: string;
+  updated_by?: string | null;
+}
+
+export interface LeaderboardAccess {
+  enabled: boolean;
+  project_enabled: boolean;
+  creator_enabled: boolean;
+  visibility: LeaderboardVisibility;
+  can_view: boolean;
+  is_staff: boolean;
+  is_owner: boolean;
+  periods: Record<LeaderboardPeriod, boolean>;
+}
+
+export interface LeaderboardEntryMetadata {
+  title?: string | null;
+  slug?: string | null;
+  thumbnail_url?: string | null;
+  creator_id?: string | null;
+  creator_name?: string | null;
+  name?: string | null;
+  avatar_url?: string | null;
+  top_project?: string | null;
+  top_slug?: string | null;
+  top_rank?: number | null;
+  featured?: boolean;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  entity_type: LeaderboardType;
+  entity_id: string;
+  score: number;
+  likes: number;
+  comments: number;
+  views: number;
+  projects: number;
+  activity_score: number;
+  metadata: LeaderboardEntryMetadata;
+  is_manual_override: boolean;
+}
+
+export interface LeaderboardResult {
+  status: 'published' | 'unavailable' | 'forbidden' | 'disabled' | 'preview';
+  entries: LeaderboardEntry[];
+  snapshot?: {
+    id: string;
+    type: LeaderboardType;
+    period: LeaderboardPeriod;
+    published_at: string | null;
+    entry_count: number;
+  };
+}
+
+export interface LeaderboardSnapshotRow {
+  id: string;
+  leaderboard_type: LeaderboardType;
+  period: LeaderboardPeriod;
+  status: LeaderboardStatus;
+  entry_count: number;
+  created_at: string;
+  published_at: string | null;
+  created_by_name?: string | null;
+  published_by_name?: string | null;
+}
+
+export interface MyLeaderboardPosition {
+  rank: number;
+  score: number;
+  likes: number;
+  projects: number;
+  previous_rank: number | null;
+  movement: number | null;
+}
+
 export type Database = {
   public: {
     Tables: {

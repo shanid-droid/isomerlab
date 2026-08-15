@@ -19,6 +19,7 @@ import ProfileEdit     from './pages/ProfileEdit';
 import ApplyCreator    from './pages/ApplyCreator';
 import CreatorDashboard from './pages/CreatorDashboard';
 import NotificationsPage from './pages/Notifications';
+import Leaderboard     from './pages/Leaderboard';
 import { supabase } from './lib/supabase';
 import { getPostLoginPath } from './lib/roles';
 
@@ -67,6 +68,7 @@ const App: React.FC = () => (
         {/* Public routes */}
         <Route path="/"                element={<HomePage />} />
         <Route path="/projects/:slug"  element={<ProjectDetail />} />
+        <Route path="/leaderboard"     element={<Leaderboard />} />
         <Route path="/login"           element={<Login />} />
         <Route path="/signup"          element={<Signup />} />
         <Route path="/admin/login"     element={<AdminLogin />} />

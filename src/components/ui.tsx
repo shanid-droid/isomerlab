@@ -46,6 +46,7 @@ export const Navbar: React.FC = () => {
   const [menuOpen, setMenuOpen]   = useState(false);
   const [active,   setActive]     = useState('home');
   const [hasSession, setHasSession] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -57,9 +58,22 @@ export const Navbar: React.FC = () => {
       setHasSession(!!session?.user);
     });
 
+    // Leaderboard is only advertised when the backend says this viewer may see it
+    const loadLeaderboardAccess = () => {
+      supabase.rpc('get_leaderboard_access').then(({ data, error }) => {
+        setShowLeaderboard(!error && !!(data as { can_view?: boolean } | null)?.can_view);
+      });
+    };
+    loadLeaderboardAccess();
+
+    const { data: { subscription: accessSub } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') loadLeaderboardAccess();
+    });
+
     return () => {
       window.removeEventListener('scroll', onScroll);
       subscription.unsubscribe();
+      accessSub.unsubscribe();
     };
   }, []);
 
@@ -100,6 +114,9 @@ export const Navbar: React.FC = () => {
               {l.label}
             </button>
           ))}
+          {showLeaderboard && (
+            <Link to="/leaderboard" className="nav-link">Leaderboard</Link>
+          )}
         </nav>
 
         {/* CTA & User Portal link */}
@@ -151,6 +168,15 @@ export const Navbar: React.FC = () => {
               {l.label}
             </button>
           ))}
+          {showLeaderboard && (
+            <Link
+              to="/leaderboard"
+              className="nav-link text-left py-3 border-b border-eg/5"
+              onClick={() => setMenuOpen(false)}
+            >
+              Leaderboard
+            </Link>
+          )}
           <Link
             to={hasSession ? "/dashboard" : "/login"}
             className="nav-link text-left py-3 border-b border-eg/5 text-eg font-mono-custom text-xs"
