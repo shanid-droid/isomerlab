@@ -220,9 +220,16 @@ export function useUserProfile(): UseUserProfileResult {
 
     const { data, error: fetchErr } = await supabase
       .from('profiles')
-      .select('id, full_name, email, avatar_url, role, bio, about, social_links, creator_approved_at, first_project_uploaded_at, creator_requirement_status, created_at, updated_at')
+      .select('id, full_name, email, avatar_url, role, bio, about, date_of_birth, social_links, creator_approved_at, first_project_uploaded_at, creator_requirement_status, created_at, updated_at')
       .eq('id', user.id)
       .single();
+
+    // Check & trigger birthday notification for authenticated user
+    try {
+      await supabase.rpc('check_and_generate_birthday_notification', { p_user_id: user.id });
+    } catch {
+      // Non-fatal if birthday RPC fails or is missing
+    }
 
     if (fetchErr) {
       console.error(

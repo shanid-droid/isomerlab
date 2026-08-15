@@ -6,6 +6,29 @@ interface CreatorApplicationsPanelProps {
   isOwner: boolean;
 }
 
+function calculateAge(dobStr?: string | null, legacyAge?: number | null): number | null {
+  if (dobStr) {
+    const dob = new Date(dobStr);
+    if (!isNaN(dob.getTime())) {
+      const today = new Date();
+      let age = today.getFullYear() - dob.getFullYear();
+      const m = today.getMonth() - dob.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+        age--;
+      }
+      return age >= 0 ? age : null;
+    }
+  }
+  return legacyAge ?? null;
+}
+
+function formatDateDisplay(dobStr?: string | null): string {
+  if (!dobStr) return 'N/A';
+  const parts = dobStr.split('-');
+  if (parts.length !== 3) return dobStr;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
 const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => {
   const [applications, setApplications] = useState<CreatorApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,8 +136,8 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
                 <tr className="border-b border-eg/10 bg-dark-200/50 font-mono-custom text-[10px] text-white/50 uppercase tracking-widest">
                   <th className="py-3 px-4">APPLICANT</th>
                   <th className="py-3 px-4">PROFESSION</th>
-                  <th className="py-3 px-4">AGE</th>
-                  <th className="py-3 px-4 hidden md:table-cell">CURRENT ROLE</th>
+                  <th className="py-3 px-4">DOB / AGE</th>
+                  <th className="py-3 px-4 hidden md:table-cell">ROLE</th>
                   <th className="py-3 px-4 hidden lg:table-cell">SKILLS</th>
                   <th className="py-3 px-4">DATE</th>
                   <th className="py-3 px-4">STATUS</th>
@@ -122,75 +145,129 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
                 </tr>
               </thead>
               <tbody className="divide-y divide-eg/10">
-                {filtered.map(app => (
-                  <tr key={app.id} className="hover:bg-eg/5">
-                    <td className="py-3 px-4 font-medium text-white">{app.full_name}</td>
-                    <td className="py-3 px-4 text-white/60">{app.profession}</td>
-                    <td className="py-3 px-4 text-white/60">{app.age}</td>
-                    <td className="py-3 px-4 text-white/60 hidden md:table-cell">{app.applicant_role}</td>
-                    <td className="py-3 px-4 text-white/50 hidden lg:table-cell truncate max-w-[140px]">{app.skills}</td>
-                    <td className="py-3 px-4 text-white/40 font-mono-custom text-[10px]">{new Date(app.created_at).toLocaleDateString()}</td>
-                    <td className="py-3 px-4">
-                      <span className={`font-mono-custom text-[10px] px-2 py-0.5 rounded border uppercase ${
-                        app.status === 'pending' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' :
-                        app.status === 'approved' ? 'text-eg border-eg/30 bg-eg/10' :
-                        'text-red-400 border-red-500/30 bg-red-500/10'
-                      }`}>{app.status}</span>
-                    </td>
-                    <td className="py-3 px-4 text-right space-x-1">
-                      <button onClick={() => setSelectedApp(app)} className="px-2 py-1 rounded border border-white/20 text-white/60 text-[10px] font-mono-custom hover:text-white">VIEW</button>
-                      {app.status === 'pending' && (
-                        <>
-                          <button onClick={() => handleApprove(app)} disabled={processing} className="px-2 py-1 rounded border border-eg/30 text-eg text-[10px] font-mono-custom hover:bg-eg/10">APPROVE</button>
-                          <button onClick={() => { setSelectedApp(app); setShowRejectModal(true); }} disabled={processing} className="px-2 py-1 rounded border border-red-500/30 text-red-400 text-[10px] font-mono-custom hover:bg-red-500/10">REJECT</button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map(app => {
+                  const ageVal = calculateAge(app.date_of_birth, app.age);
+                  return (
+                    <tr key={app.id} className="hover:bg-eg/5">
+                      <td className="py-3 px-4 font-medium text-white">{app.full_name}</td>
+                      <td className="py-3 px-4 text-white/60">{app.profession}</td>
+                      <td className="py-3 px-4 text-white/60 font-mono-custom text-[11px]">
+                        {app.date_of_birth ? formatDateDisplay(app.date_of_birth) : 'N/A'}
+                        {ageVal !== null && <span className="text-white/40 ml-1">({ageVal}y)</span>}
+                      </td>
+                      <td className="py-3 px-4 text-white/60 hidden md:table-cell">{app.applicant_role}</td>
+                      <td className="py-3 px-4 text-white/50 hidden lg:table-cell truncate max-w-[140px]">{app.skills}</td>
+                      <td className="py-3 px-4 text-white/40 font-mono-custom text-[10px]">{new Date(app.created_at).toLocaleDateString()}</td>
+                      <td className="py-3 px-4">
+                        <span className={`font-mono-custom text-[10px] px-2 py-0.5 rounded border uppercase ${
+                          app.status === 'pending' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' :
+                          app.status === 'approved' ? 'text-eg border-eg/30 bg-eg/10' :
+                          'text-red-400 border-red-500/30 bg-red-500/10'
+                        }`}>{app.status}</span>
+                      </td>
+                      <td className="py-3 px-4 text-right space-x-1">
+                        <button onClick={() => setSelectedApp(app)} className="px-2 py-1 rounded border border-white/20 text-white/60 text-[10px] font-mono-custom hover:text-white">VIEW</button>
+                        {app.status === 'pending' && (
+                          <>
+                            <button onClick={() => handleApprove(app)} disabled={processing} className="px-2 py-1 rounded border border-eg/30 text-eg text-[10px] font-mono-custom hover:bg-eg/10">APPROVE</button>
+                            <button onClick={() => { setSelectedApp(app); setShowRejectModal(true); }} disabled={processing} className="px-2 py-1 rounded border border-red-500/30 text-red-400 text-[10px] font-mono-custom hover:bg-red-500/10">REJECT</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* View Modal */}
+      {/* View Modal — Structured Section View */}
       {selectedApp && !showRejectModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="glass rounded-2xl border border-eg/30 p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto space-y-4">
-            <div className="flex justify-between items-start">
+          <div className="glass rounded-2xl border border-eg/30 p-6 md:p-8 max-w-2xl w-full max-h-[85vh] overflow-y-auto space-y-6">
+            <div className="flex justify-between items-start border-b border-eg/10 pb-3">
               <div>
-                <p className="font-mono-custom text-[10px] text-eg uppercase">APPLICATION DETAILS</p>
-                <h3 className="font-display text-lg font-bold text-white">{selectedApp.full_name}</h3>
+                <p className="font-mono-custom text-[10px] text-eg uppercase tracking-widest">CREATOR APPLICATION REVIEW</p>
+                <h3 className="font-display text-xl font-bold text-white mt-1">{selectedApp.full_name}</h3>
               </div>
-              <button onClick={() => setSelectedApp(null)} className="text-white/40 hover:text-white">✕</button>
+              <button onClick={() => setSelectedApp(null)} className="text-white/40 hover:text-white text-lg">✕</button>
             </div>
-            {[
-              ['Profession', selectedApp.profession],
-              ['Age', String(selectedApp.age)],
-              ['Current Role', selectedApp.applicant_role],
-              ['Bio', selectedApp.bio],
-              ['Skills', selectedApp.skills],
-              ['Education', selectedApp.education],
-              ['Location', selectedApp.location],
-              ['Motivation', selectedApp.motivation],
-              ['Project Types', selectedApp.project_types],
-              ['GitHub', selectedApp.github_url],
-              ['Portfolio', selectedApp.portfolio_url],
-              ['LinkedIn', selectedApp.linkedin_url],
-              ['Other', selectedApp.other_url],
-              ['Status', selectedApp.status],
-              ['Rejection Reason', selectedApp.rejection_reason],
-            ].filter(([, v]) => v).map(([label, value]) => (
-              <div key={label as string} className="space-y-0.5">
-                <p className="font-mono-custom text-[10px] text-white/40 uppercase">{label}</p>
-                <p className="font-sans text-xs text-white/80 whitespace-pre-line">{value}</p>
+
+            {/* 1. Personal Information */}
+            <div className="space-y-2 bg-dark-200/50 p-4 rounded-xl border border-white/5">
+              <p className="font-mono-custom text-[10px] text-eg uppercase tracking-wider font-semibold">1. Personal Information</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div><span className="text-white/40">Date of Birth: </span><span className="text-white font-mono-custom">{selectedApp.date_of_birth ? formatDateDisplay(selectedApp.date_of_birth) : 'N/A'}</span></div>
+                <div><span className="text-white/40">Calculated Age: </span><span className="text-white font-mono-custom">{calculateAge(selectedApp.date_of_birth, selectedApp.age) !== null ? `${calculateAge(selectedApp.date_of_birth, selectedApp.age)} years` : 'N/A'}</span></div>
+                <div><span className="text-white/40">Location: </span><span className="text-white">{selectedApp.location || 'Not provided'}</span></div>
               </div>
-            ))}
+            </div>
+
+            {/* 2. Professional Information */}
+            <div className="space-y-2 bg-dark-200/50 p-4 rounded-xl border border-white/5">
+              <p className="font-mono-custom text-[10px] text-eg uppercase tracking-wider font-semibold">2. Professional Information</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div><span className="text-white/40">Profession: </span><span className="text-white">{selectedApp.profession}</span></div>
+                <div><span className="text-white/40">Current Role: </span><span className="text-white">{selectedApp.applicant_role}</span></div>
+                <div><span className="text-white/40">Education: </span><span className="text-white">{selectedApp.education || 'N/A'}</span></div>
+                <div><span className="text-white/40">Experience Level: </span><span className="text-white">{selectedApp.experience_level || 'N/A'}</span></div>
+                {selectedApp.education_details && (
+                  <div className="sm:col-span-2"><span className="text-white/40">Education Details: </span><span className="text-white/80">{selectedApp.education_details}</span></div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. Skills & Project Types */}
+            <div className="space-y-3 bg-dark-200/50 p-4 rounded-xl border border-white/5">
+              <p className="font-mono-custom text-[10px] text-eg uppercase tracking-wider font-semibold">3. Skills & Project Types</p>
+              <div>
+                <p className="text-[10px] text-white/40 uppercase mb-1 font-mono-custom">Primary Skills:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(selectedApp.skills || '').split(',').map(s => s.trim()).filter(Boolean).map(s => (
+                    <span key={s} className="px-2.5 py-0.5 rounded bg-eg/10 border border-eg/20 text-eg text-[11px] font-mono-custom">{s}</span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-white/40 uppercase mb-1 font-mono-custom">Project Types:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(selectedApp.project_types || '').split(',').map(p => p.trim()).filter(Boolean).map(p => (
+                    <span key={p} className="px-2.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[11px] font-mono-custom">{p}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Online Links */}
+            <div className="space-y-2 bg-dark-200/50 p-4 rounded-xl border border-white/5 text-xs">
+              <p className="font-mono-custom text-[10px] text-eg uppercase tracking-wider font-semibold">4. Online Links</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {selectedApp.github_url && <div><span className="text-white/40">GitHub: </span><a href={selectedApp.github_url} target="_blank" rel="noreferrer" className="text-eg hover:underline truncate inline-block max-w-full">{selectedApp.github_url}</a></div>}
+                {selectedApp.portfolio_url && <div><span className="text-white/40">Portfolio: </span><a href={selectedApp.portfolio_url} target="_blank" rel="noreferrer" className="text-eg hover:underline truncate inline-block max-w-full">{selectedApp.portfolio_url}</a></div>}
+                {selectedApp.linkedin_url && <div><span className="text-white/40">LinkedIn: </span><a href={selectedApp.linkedin_url} target="_blank" rel="noreferrer" className="text-eg hover:underline truncate inline-block max-w-full">{selectedApp.linkedin_url}</a></div>}
+                {selectedApp.other_url && <div><span className="text-white/40">Other: </span><a href={selectedApp.other_url} target="_blank" rel="noreferrer" className="text-eg hover:underline truncate inline-block max-w-full">{selectedApp.other_url}</a></div>}
+              </div>
+            </div>
+
+            {/* 5. Statements */}
+            <div className="space-y-3 bg-dark-200/50 p-4 rounded-xl border border-white/5">
+              <p className="font-mono-custom text-[10px] text-eg uppercase tracking-wider font-semibold">5. Statements</p>
+              <div>
+                <p className="text-[10px] text-white/40 uppercase mb-1 font-mono-custom">Bio:</p>
+                <p className="text-xs text-white/80 whitespace-pre-wrap leading-relaxed">{selectedApp.bio}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-white/40 uppercase mb-1 font-mono-custom">Motivation:</p>
+                <p className="text-xs text-white/80 whitespace-pre-wrap leading-relaxed">{selectedApp.motivation}</p>
+              </div>
+            </div>
+
             {selectedApp.status === 'pending' && (
               <div className="flex gap-3 pt-2 border-t border-eg/10">
-                <button onClick={() => handleApprove(selectedApp)} disabled={processing} className="btn-primary py-2 px-4 text-xs flex-1">APPROVE</button>
-                <button onClick={() => setShowRejectModal(true)} disabled={processing} className="flex-1 py-2 px-4 text-xs font-mono-custom rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10">REJECT</button>
+                <button onClick={() => handleApprove(selectedApp)} disabled={processing} className="btn-primary py-2.5 px-4 text-xs flex-1 font-mono-custom">APPROVE APPLICATION</button>
+                <button onClick={() => setShowRejectModal(true)} disabled={processing} className="flex-1 py-2.5 px-4 text-xs font-mono-custom rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10">REJECT</button>
               </div>
             )}
           </div>

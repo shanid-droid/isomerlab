@@ -24,6 +24,11 @@ function AudienceBadge({ type }: { type: NotificationType }) {
       🌐 PUBLIC
     </span>
   );
+  if (type === 'birthday') return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono-custom tracking-widest bg-pink-500/10 border border-pink-500/30 text-pink-400">
+      🎂 BIRTHDAY
+    </span>
+  );
   if (type === 'all_creators' || type === 'creators') return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono-custom tracking-widest bg-purple-500/10 border border-purple-500/30 text-purple-400">
       ✦ CREATORS

@@ -2,7 +2,7 @@
    Mirrors columns consumed by the frontend.
 ──────────────────────────────────────────────────────────────── */
 
-export type NotificationType = 'public' | 'private' | 'creators' | 'all_creators';
+export type NotificationType = 'public' | 'private' | 'creators' | 'all_creators' | 'birthday';
 
 export interface Notification {
   id: string;
@@ -79,6 +79,7 @@ export interface UserProfile {
   role: UserRole;
   bio?: string | null;
   about?: string | null;
+  date_of_birth?: string | null;
   social_links?: SocialLinks | null;
   creator_approved_at?: string | null;
   first_project_uploaded_at?: string | null;
@@ -91,12 +92,17 @@ export interface CreatorApplication {
   id: string;
   user_id: string;
   full_name: string;
-  age: number;
+  date_of_birth?: string | null;
+  age?: number | null;
   profession: string;
+  profession_other?: string | null;
   applicant_role: string;
+  applicant_role_other?: string | null;
   bio: string;
   skills: string;
   education?: string | null;
+  education_details?: string | null;
+  experience_level?: string | null;
   location?: string | null;
   github_url?: string | null;
   portfolio_url?: string | null;

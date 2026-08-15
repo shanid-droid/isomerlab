@@ -10,6 +10,13 @@ function formatDate(iso: string) {
 }
 
 function TypeBadge({ type }: { type: NotificationType }) {
+  if (type === 'birthday') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono-custom tracking-widest bg-pink-500/10 border border-pink-500/30 text-pink-400">
+        🎂 BIRTHDAY
+      </span>
+    );
+  }
   if (type === 'creators' || type === 'all_creators') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono-custom tracking-widest bg-purple-500/10 border border-purple-500/30 text-purple-400">
