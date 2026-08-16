@@ -5,7 +5,8 @@ import { useUserProfile } from '../lib/hooks';
 import { IsomerLogo } from '../components/ui';
 import { logAuthEvent } from '../lib/activityLog';
 import ThumbnailPromptSection from '../components/ThumbnailPromptSection';
-import type { Project, ProjectGalleryItem } from '../lib/types';
+import { ProjectLinksEditor, formatValidUrl } from '../components/ProjectLinks';
+import type { Project, ProjectGalleryItem, ProjectLink } from '../lib/types';
 import { CREATOR_REQUIREMENT_DAYS } from '../lib/constants';
 import { isCreatorRole } from '../lib/roles';
 
@@ -32,6 +33,7 @@ const CreatorDashboard: React.FC = () => {
   const [formDescription, setFormDescription] = useState('');
   const [formComponents, setFormComponents] = useState('');
   const [formGithubUrl, setFormGithubUrl] = useState('');
+  const [formProjectLinks, setFormProjectLinks] = useState<ProjectLink[]>([]);
   const [formPublished, setFormPublished] = useState(true);
   const [formThumbnailFile, setFormThumbnailFile] = useState<File | null>(null);
   const [formThumbnailPreview, setFormThumbnailPreview] = useState<string | null>(null);
@@ -125,7 +127,7 @@ const CreatorDashboard: React.FC = () => {
   const handleOpenAdd = () => {
     setEditingProject(null);
     setFormTitle(''); setFormSlug(''); setFormDescription(''); setFormComponents('');
-    setFormGithubUrl(''); setFormPublished(true);
+    setFormGithubUrl(''); setFormProjectLinks([]); setFormPublished(true);
     setFormThumbnailFile(null); setFormThumbnailPreview(null);
     setFormGalleryFiles([]); setExistingGallery([]); setDeletingGalleryIds([]); setFormError(null);
     setIsModalOpen(true);
@@ -137,6 +139,22 @@ const CreatorDashboard: React.FC = () => {
     setFormDescription(project.description || '');
     setFormComponents(Array.isArray(project.components) ? project.components.join(', ') : (project.components as string) || '');
     setFormGithubUrl(project.github_url || '');
+
+    if (project.project_links && project.project_links.length > 0) {
+      setFormProjectLinks(project.project_links);
+    } else if (project.github_url) {
+      setFormProjectLinks([
+        {
+          id: 'gh_init',
+          type: 'github',
+          title: 'GitHub Repository',
+          url: project.github_url,
+        },
+      ]);
+    } else {
+      setFormProjectLinks([]);
+    }
+
     setFormPublished(project.published !== false);
     setFormThumbnailPreview(project.thumbnail_url || null);
     setFormThumbnailFile(null); setFormGalleryFiles([]);
@@ -158,10 +176,25 @@ const CreatorDashboard: React.FC = () => {
         if (editingProject?.thumbnail_url) await removeStorageFile(editingProject.thumbnail_url);
         thumbnailUrl = newUrl;
       }
+
+      // Format and validate links
+      const cleanedLinks = formProjectLinks
+        .filter(l => l.url && l.url.trim() !== '')
+        .map(l => ({
+          ...l,
+          url: formatValidUrl(l.url),
+          title: l.title.trim() || l.type.toUpperCase(),
+        }));
+
+      const ghLink = cleanedLinks.find(l => l.type === 'github');
+      const syncedGithub = ghLink ? ghLink.url : (formGithubUrl.trim() || null);
+
       const payload = {
         title: formTitle.trim(), slug: formSlug.trim(),
         description: formDescription.trim(), components: componentsArray,
-        github_url: formGithubUrl.trim() || null, thumbnail_url: thumbnailUrl, published: formPublished,
+        github_url: syncedGithub,
+        project_links: cleanedLinks,
+        thumbnail_url: thumbnailUrl, published: formPublished,
       };
       let projectId = editingProject?.id;
       if (editingProject) {
@@ -364,10 +397,19 @@ const CreatorDashboard: React.FC = () => {
                 <div><label className="font-mono-custom text-[10px] text-white/50 uppercase">Slug *</label><input required className={inputClass} value={formSlug} onChange={e => setFormSlug(generateSlug(e.target.value))} /></div>
               </div>
               <div><label className="font-mono-custom text-[10px] text-white/50 uppercase">Description</label><textarea rows={3} className={`${inputClass} font-sans`} value={formDescription} onChange={e => setFormDescription(e.target.value)} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="font-mono-custom text-[10px] text-white/50 uppercase">Components</label><input className={inputClass} value={formComponents} onChange={e => setFormComponents(e.target.value)} placeholder="React, TS..." /></div>
-                <div><label className="font-mono-custom text-[10px] text-white/50 uppercase">GitHub URL</label><input type="url" className={inputClass} value={formGithubUrl} onChange={e => setFormGithubUrl(e.target.value)} /></div>
+              <div>
+                <label className="font-mono-custom text-[10px] text-white/50 uppercase">Components / Tech Stack</label>
+                <input className={inputClass} value={formComponents} onChange={e => setFormComponents(e.target.value)} placeholder="React, TypeScript, Tailwind, Python..." />
               </div>
+
+              {/* Project Links Section */}
+              <div className="p-4 rounded-xl border border-eg/20 bg-dark-200/50 space-y-3">
+                <ProjectLinksEditor
+                  links={formProjectLinks}
+                  onChange={setFormProjectLinks}
+                />
+              </div>
+
               <label className="flex items-center gap-2 text-xs font-mono-custom"><input type="checkbox" checked={formPublished} onChange={e => setFormPublished(e.target.checked)} className="rounded border-eg/40" /> PUBLISH IMMEDIATELY</label>
               <div>
                 <label className="font-mono-custom text-[10px] text-white/50 uppercase block mb-2">Thumbnail</label>

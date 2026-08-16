@@ -34,6 +34,23 @@ export interface NotificationWithRead extends Notification {
   recipient_name?: string | null;
 }
 
+export type ProjectLinkType =
+  | 'website'
+  | 'youtube'
+  | 'github'
+  | 'demo'
+  | 'docs'
+  | 'figma'
+  | 'download'
+  | 'other';
+
+export interface ProjectLink {
+  id: string;
+  type: ProjectLinkType;
+  title: string;
+  url: string;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -42,6 +59,7 @@ export interface Project {
   thumbnail_url?: string | null;
   components?: string[] | string | null;
   github_url?: string | null;
+  project_links?: ProjectLink[] | null;
   published?: boolean;
   created_by?: string | null;
   created_at?: string;

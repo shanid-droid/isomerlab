@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo } from '../components/ui';
-import type { Project, ProjectGalleryItem, UserProfile } from '../lib/types';
+import type { Project, ProjectGalleryItem, UserProfile, ProjectLink } from '../lib/types';
 import OwnerOverview from '../components/admin/OwnerOverview';
 import ContactInbox from '../components/admin/ContactInbox';
 import ActivityLogsPanel from '../components/admin/ActivityLogsPanel';
 import { logAuthEvent } from '../lib/activityLog';
 import ThumbnailPromptSection from '../components/ThumbnailPromptSection';
+import { ProjectLinksEditor, formatValidUrl } from '../components/ProjectLinks';
 import CreatorApplicationsPanel from '../components/admin/CreatorApplicationsPanel';
 import SiteControlPanel from '../components/admin/SiteControlPanel';
 import NotificationsPanel from '../components/admin/NotificationsPanel';
@@ -86,6 +87,7 @@ const AdminDashboard: React.FC = () => {
   const [formDescription, setFormDescription] = useState('');
   const [formComponents, setFormComponents] = useState('');
   const [formGithubUrl, setFormGithubUrl] = useState('');
+  const [formProjectLinks, setFormProjectLinks] = useState<ProjectLink[]>([]);
   const [formPublished, setFormPublished] = useState(true);
   const [formThumbnailFile, setFormThumbnailFile] = useState<File | null>(null);
   const [formThumbnailPreview, setFormThumbnailPreview] = useState<string | null>(null);
@@ -319,6 +321,7 @@ const AdminDashboard: React.FC = () => {
     setFormDescription('');
     setFormComponents('');
     setFormGithubUrl('');
+    setFormProjectLinks([]);
     setFormPublished(true);
     setFormThumbnailFile(null);
     setFormThumbnailPreview(null);
@@ -347,6 +350,22 @@ const AdminDashboard: React.FC = () => {
     }
 
     setFormGithubUrl(project.github_url || '');
+
+    if (project.project_links && project.project_links.length > 0) {
+      setFormProjectLinks(project.project_links);
+    } else if (project.github_url) {
+      setFormProjectLinks([
+        {
+          id: 'gh_init',
+          type: 'github',
+          title: 'GitHub Repository',
+          url: project.github_url,
+        },
+      ]);
+    } else {
+      setFormProjectLinks([]);
+    }
+
     setFormPublished(project.published !== false);
     setFormThumbnailFile(null);
     setFormThumbnailPreview(project.thumbnail_url || null);
@@ -479,13 +498,25 @@ const AdminDashboard: React.FC = () => {
         thumbnailUrl = newThumbnailUrl;
       }
 
-      // 2. Prepare payload
+      // 2. Prepare payload & sanitize links
+      const cleanedLinks = formProjectLinks
+        .filter((l) => l.url && l.url.trim() !== '')
+        .map((l) => ({
+          ...l,
+          url: formatValidUrl(l.url),
+          title: l.title.trim() || l.type.toUpperCase(),
+        }));
+
+      const ghLink = cleanedLinks.find((l) => l.type === 'github');
+      const syncedGithubUrl = ghLink ? ghLink.url : (formGithubUrl.trim() || null);
+
       const projectPayload: any = {
         title: formTitle.trim(),
         slug: formSlug.trim(),
         description: formDescription.trim(),
         components: componentsArray,
-        github_url: formGithubUrl.trim() || null,
+        github_url: syncedGithubUrl,
+        project_links: cleanedLinks,
         thumbnail_url: thumbnailUrl,
         published: formPublished,
       };
@@ -1126,16 +1157,30 @@ const AdminDashboard: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* GitHub Link */}
+                        {/* Links Column */}
                         <td className="py-4 px-4 hidden lg:table-cell">
-                          {project.github_url ? (
+                          {project.project_links && project.project_links.length > 0 ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono-custom text-[10px] text-eg bg-eg/10 border border-eg/20 px-2 py-0.5 rounded">
+                                {project.project_links.length} {project.project_links.length === 1 ? 'Link' : 'Links'}
+                              </span>
+                              <a
+                                href={project.project_links[0].url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono-custom text-[11px] text-white/60 hover:text-eg truncate max-w-[100px] inline-block"
+                              >
+                                {project.project_links[0].title || 'View ↗'}
+                              </a>
+                            </div>
+                          ) : project.github_url ? (
                             <a
                               href={project.github_url}
                               target="_blank"
                               rel="noreferrer"
                               className="font-mono-custom text-[11px] text-eg/80 hover:text-eg underline truncate max-w-[140px] block"
                             >
-                              GitHub Link ↗
+                              GitHub ↗
                             </a>
                           ) : (
                             <span className="text-white/20 italic text-[11px]">None</span>
@@ -1452,33 +1497,26 @@ const AdminDashboard: React.FC = () => {
                 />
               </div>
 
-              {/* Components & GitHub URL */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-mono-custom text-[11px] text-white/60 uppercase tracking-wider">
-                    COMPONENTS USED (COMMA-SEPARATED)
-                  </label>
-                  <input
-                    type="text"
-                    value={formComponents}
-                    onChange={(e) => setFormComponents(e.target.value)}
-                    placeholder="React, Supabase, Tailwind, TypeScript"
-                    className="w-full bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-2.5 text-xs text-white placeholder-white/20 focus:outline-none focus:border-eg font-mono-custom"
-                  />
-                </div>
+              {/* Components */}
+              <div className="space-y-1.5">
+                <label className="block font-mono-custom text-[11px] text-white/60 uppercase tracking-wider">
+                  COMPONENTS USED (COMMA-SEPARATED)
+                </label>
+                <input
+                  type="text"
+                  value={formComponents}
+                  onChange={(e) => setFormComponents(e.target.value)}
+                  placeholder="React, Supabase, Tailwind, TypeScript, Python"
+                  className="w-full bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-2.5 text-xs text-white placeholder-white/20 focus:outline-none focus:border-eg font-mono-custom"
+                />
+              </div>
 
-                <div className="space-y-1.5">
-                  <label className="block font-mono-custom text-[11px] text-white/60 uppercase tracking-wider">
-                    GITHUB REPOSITORY URL
-                  </label>
-                  <input
-                    type="url"
-                    value={formGithubUrl}
-                    onChange={(e) => setFormGithubUrl(e.target.value)}
-                    placeholder="https://github.com/org/repo"
-                    className="w-full bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-2.5 text-xs text-white placeholder-white/20 focus:outline-none focus:border-eg font-mono-custom"
-                  />
-                </div>
+              {/* Project Links & Resources Section */}
+              <div className="p-4 rounded-xl border border-eg/20 bg-dark-200/50 space-y-3">
+                <ProjectLinksEditor
+                  links={formProjectLinks}
+                  onChange={setFormProjectLinks}
+                />
               </div>
 
               {/* Status Switch */}

@@ -140,6 +140,7 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
           thumbnail_url,
           components,
           github_url,
+          project_links,
           published,
           created_by,
           created_at
