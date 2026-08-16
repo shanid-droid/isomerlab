@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from './supabase';
 import type { Project, ProjectGalleryItem, UserProfile, ProjectWithCreator, SocialLinks, CreatorApplication } from './types';
+import { resolveUserRole } from './roles';
 
 interface UseProjectsResult {
   projects: ProjectWithCreator[];
@@ -248,7 +249,7 @@ export function useUserProfile(): UseUserProfileResult {
         full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? null,
         email: user.email ?? null,
         avatar_url: user.user_metadata?.avatar_url ?? null,
-        role: 'user' as const,
+        role: resolveUserRole(user.id, 'user'),
         bio: null,
         about: null,
         social_links: {} as SocialLinks,
@@ -268,7 +269,7 @@ export function useUserProfile(): UseUserProfileResult {
         full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? null,
         email: user.email ?? null,
         avatar_url: user.user_metadata?.avatar_url ?? null,
-        role: 'user' as const,
+        role: resolveUserRole(user.id, 'user'),
         bio: null,
         about: null,
         social_links: {} as SocialLinks,
@@ -278,6 +279,7 @@ export function useUserProfile(): UseUserProfileResult {
 
     // Parse social_links — Supabase returns JSONB as a JS object, but cast for safety.
     const row = data as UserProfile;
+    row.role = resolveUserRole(row.id, row.role);
     if (row.social_links && typeof row.social_links !== 'object') {
       try {
         row.social_links = JSON.parse(row.social_links as unknown as string) as SocialLinks;
@@ -383,7 +385,7 @@ export function usePublicProfile(userId: string | undefined): UsePublicProfileRe
 
       const { data, error: fetchErr } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url, bio, about, social_links, created_at')
+        .select('id, full_name, avatar_url, bio, about, social_links, role, creator_approved_at, created_at')
         .eq('id', userId)
         .single();
 
@@ -422,6 +424,7 @@ export function usePublicProfile(userId: string | undefined): UsePublicProfileRe
 
       // Parse social_links JSONB safely
       const row = data as UserProfile;
+      row.role = resolveUserRole(row.id, row.role);
       if (row.social_links && typeof row.social_links !== 'object') {
         try {
           row.social_links = JSON.parse(row.social_links as unknown as string) as SocialLinks;

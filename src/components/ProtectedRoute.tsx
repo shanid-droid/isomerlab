@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { UserRole } from '../lib/types';
 import { OWNER_ID } from '../lib/constants';
-import { isAdminRole, isCreatorRole } from '../lib/roles';
+import { isAdminRole, isCreatorRole, resolveUserRole } from '../lib/roles';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -42,7 +42,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           setUserId(session.user.id);
         }
 
-        let fetchedRole: UserRole = 'user';
+        let rawRole: string = 'user';
         try {
           const { data: profile, error } = await supabase
             .from('profiles')
@@ -51,19 +51,21 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
             .maybeSingle();
 
           if (!error && profile?.role) {
-            fetchedRole = profile.role as UserRole;
+            rawRole = profile.role;
           }
         } catch (err) {
           console.warn('[ProtectedRoute] Profile query notice:', err);
         }
 
+        const effectiveRole = resolveUserRole(session.user.id, rawRole);
+
         if (isMounted) {
-          setUserRole(fetchedRole);
+          setUserRole(effectiveRole);
           setLoading(false);
         }
       } catch {
         if (isMounted) {
-          setUserRole('user');
+          setUserRole(session?.user?.id === OWNER_ID ? 'owner' : 'user');
           setLoading(false);
         }
       }
@@ -107,11 +109,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to={requireAdmin ? "/admin/login" : "/login"} replace />;
   }
 
-  if (requireAdmin && !isAdminRole(userRole) && userId !== OWNER_ID) {
+  if (requireAdmin && !isAdminRole(userRole, userId)) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  if (requireCreator && !isCreatorRole(userRole)) {
+  if (requireCreator && !isCreatorRole(userRole, userId)) {
     return <Navigate to="/dashboard" replace />;
   }
 

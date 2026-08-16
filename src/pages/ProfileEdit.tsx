@@ -373,7 +373,7 @@ const ProfileEdit: React.FC = () => {
                   ROLE <span className="text-white/20">(read-only)</span>
                 </label>
                 <div className="w-full bg-dark-200/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/30 font-mono-custom cursor-not-allowed">
-                  {formatRoleLabel(profile?.role)}
+                  {formatRoleLabel(profile?.role, profile?.id)}
                 </div>
               </div>
               <div className="space-y-1.5">

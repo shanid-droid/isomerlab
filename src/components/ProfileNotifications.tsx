@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useProfileNotifications } from '../lib/notificationHooks';
 import type { NotificationType } from '../lib/types';
+import { isCreatorRole } from '../lib/roles';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('en-GB', {
@@ -40,7 +41,7 @@ export const ProfileNotifications: React.FC<ProfileNotificationsProps> = ({ user
   const { notifications, loading, error, markRead, markAllRead } = useProfileNotifications();
   const [filter, setFilter] = useState<'all' | 'private' | 'creator'>('all');
 
-  const isCreator = userRole === 'creator';
+  const isCreator = isCreatorRole(userRole);
 
   const filtered = notifications.filter(n => {
     if (filter === 'private' && n.notification_type !== 'private') return false;

@@ -76,8 +76,9 @@ const App: React.FC = () => (
         {/* Auth callback — handles Supabase email verification redirect */}
         <Route path="/auth/callback"   element={<AuthCallback />} />
 
-        {/* Public creator profile page — no auth required */}
+        {/* Public creator/user profile page — no auth required */}
         <Route path="/profile/:id"     element={<PublicProfile />} />
+        <Route path="/profile/:userId" element={<PublicProfile />} />
 
         {/* Protected: authenticated user routes */}
         <Route

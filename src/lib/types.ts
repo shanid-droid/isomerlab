@@ -99,7 +99,7 @@ export interface ProjectCommentWithProfile extends ProjectComment {
   replies?: ProjectCommentWithProfile[];
 }
 
-export type UserRole = 'user' | 'admin' | 'creator';
+export type UserRole = 'owner' | 'admin' | 'creator' | 'user';
 
 export type CreatorApplicationStatus = 'pending' | 'approved' | 'rejected';
 

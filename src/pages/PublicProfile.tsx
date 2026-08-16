@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { usePublicProfile, useCreatorProjects } from '../lib/hooks';
+import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import type { SocialLinks, Project } from '../lib/types';
+import { isCreatorRole, isAdminRole, isOwner } from '../lib/roles';
 
 /* ── Social Link Icons ───────────────────────────────────────────── */
 const SocialIcon: React.FC<{ platform: string; className?: string }> = ({ platform, className = 'w-4 h-4' }) => {
@@ -29,7 +31,7 @@ const SocialIcon: React.FC<{ platform: string; className?: string }> = ({ platfo
     ),
     youtube: (
       <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-        <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
       </svg>
     ),
     website: (
@@ -147,25 +149,49 @@ const ProfileNotFound: React.FC = () => (
   </div>
 );
 
-/* ── Public Profile Page ─────────────────────────────────────────── */
-const PublicProfile: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
-  const { profile, loading: profileLoading, error: profileError } = usePublicProfile(id);
-  const { projects, loading: projectsLoading } = useCreatorProjects(id);
+/* ── Public Profile Page Component ───────────────────────────────── */
+export const PublicProfile: React.FC = () => {
+  const { id, userId } = useParams<{ id?: string; userId?: string }>();
+  const targetUserId = id || userId;
+
+  const { profile, loading: profileLoading, error: profileError } = usePublicProfile(targetUserId);
+  const { projects, loading: projectsLoading } = useCreatorProjects(targetUserId);
+
+  // Authenticated user detection to conditionally show "← Dashboard"
+  const [currentAuthUserId, setCurrentAuthUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentAuthUserId(session?.user?.id || null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentAuthUserId(session?.user?.id || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const isOwnProfile = !!(currentAuthUserId && targetUserId && currentAuthUserId === targetUserId);
 
   const formatDate = (d?: string | null) => {
     if (!d) return null;
     try {
       return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   };
 
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-    : '??';
+    : 'US';
 
   const socialLinks = (profile?.social_links || {}) as SocialLinks;
   const socialEntries = Object.entries(socialLinks).filter(([, v]) => v);
+
+  const isCreator = isCreatorRole(profile?.role) || isOwner(profile) || !!profile?.creator_approved_at;
+  const isAdmin = isAdminRole(profile?.role) || isOwner(profile);
 
   const loading = profileLoading || projectsLoading;
 
@@ -174,11 +200,28 @@ const PublicProfile: React.FC = () => {
       {/* Header */}
       <header className="glass-dark border-b border-eg/10 py-4 sticky top-0 z-40 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-          <Link to="/" className="focus:outline-none"><IsomerLogo size="md" /></Link>
-          <Link to="/#projects" className="btn-outline text-[11px] flex items-center gap-2">
-            <ArrowRight className="w-3.5 h-3.5 rotate-180 text-eg" />
-            ALL PROJECTS
+          <Link to="/" className="focus:outline-none">
+            <IsomerLogo size="md" />
           </Link>
+
+          <div className="flex items-center gap-3">
+            {/* Show "← Dashboard" ONLY when user is viewing their OWN profile */}
+            {isOwnProfile && (
+              <Link
+                to="/dashboard"
+                id="header-dashboard-return-btn"
+                className="btn-outline text-xs px-3.5 py-1.5 flex items-center gap-1.5 text-eg border-eg/40 hover:bg-eg/10 font-mono-custom transition-all"
+              >
+                <span>←</span>
+                <span>Dashboard</span>
+              </Link>
+            )}
+
+            <Link to="/#projects" className="btn-outline text-[11px] flex items-center gap-2">
+              <ArrowRight className="w-3.5 h-3.5 rotate-180 text-eg" />
+              ALL PROJECTS
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -189,20 +232,41 @@ const PublicProfile: React.FC = () => {
           <ProfileNotFound />
         ) : (
           <div className="space-y-10 animate-fade-in-up">
-            {/* Breadcrumb */}
-            <nav className="flex items-center gap-2 font-mono-custom text-[11px] tracking-widest text-white/40 uppercase">
-              <Link to="/" className="hover:text-eg transition-colors">HOME</Link>
-              <span className="text-eg/40">/</span>
-              <span className="text-eg font-semibold">CREATOR PROFILE</span>
-            </nav>
+            {/* Breadcrumb Navigation */}
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <nav className="flex items-center gap-2 font-mono-custom text-[11px] tracking-widest text-white/40 uppercase">
+                <Link to="/" className="hover:text-eg transition-colors">
+                  HOME
+                </Link>
+                <span className="text-eg/40">/</span>
+                <span className="text-eg font-semibold">
+                  {isCreator ? 'CREATOR PROFILE' : 'USER PROFILE'}
+                </span>
+              </nav>
+
+              {isOwnProfile && (
+                <div className="flex items-center gap-2">
+                  <span className="font-mono-custom text-[10px] text-eg bg-eg/10 border border-eg/30 px-2.5 py-1 rounded-full">
+                    ● Viewing Your Public Profile
+                  </span>
+                  <Link
+                    to="/profile/edit"
+                    className="text-xs font-mono-custom text-white/60 hover:text-eg underline ml-1"
+                  >
+                    Edit Profile ↗
+                  </Link>
+                </div>
+              )}
+            </div>
 
             {/* Profile Hero Card */}
             <div className="glass rounded-2xl p-8 border border-eg/20 shadow-2xl relative overflow-hidden">
-              {/* Corner Accents */}
+              {/* Futuristic Corner Accents */}
               <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-eg/60" />
               <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-eg/60" />
               <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-eg/60" />
               <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-eg/60" />
+              
               {/* Ambient glow */}
               <div className="absolute top-0 right-0 w-60 h-60 bg-eg/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -212,7 +276,7 @@ const PublicProfile: React.FC = () => {
                   {profile.avatar_url ? (
                     <img
                       src={profile.avatar_url}
-                      alt={profile.full_name || 'Creator'}
+                      alt={profile.full_name || 'User'}
                       className="w-28 h-28 rounded-2xl object-cover border-2 border-eg/40 shadow-eg-sm"
                     />
                   ) : (
@@ -220,32 +284,51 @@ const PublicProfile: React.FC = () => {
                       <span className="font-display text-3xl font-bold text-eg">{initials}</span>
                     </div>
                   )}
-                  <div className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full bg-eg flex items-center justify-center shadow-sm">
-                    <svg className="w-3.5 h-3.5 text-dark" viewBox="0 0 24 24" fill="currentColor">
-                      <path fillRule="evenodd" clipRule="evenodd" d="M20.707 5.293a1 1 0 010 1.414l-11 11a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L9 15.586l10.293-10.293a1 1 0 011.414 0z" />
-                    </svg>
-                  </div>
+                  {isCreator && (
+                    <div className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full bg-eg flex items-center justify-center shadow-sm" title="Verified Creator">
+                      <svg className="w-3.5 h-3.5 text-dark" viewBox="0 0 24 24" fill="currentColor">
+                        <path fillRule="evenodd" clipRule="evenodd" d="M20.707 5.293a1 1 0 010 1.414l-11 11a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L9 15.586l10.293-10.293a1 1 0 011.414 0z" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
 
                 {/* Info */}
                 <div className="flex-1 space-y-4 text-center md:text-left">
                   <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-eg/30 bg-eg/10 mb-3">
-                      <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
-                      <span className="font-mono-custom text-[10px] tracking-widest text-eg uppercase">ISOMER CREATOR</span>
+                    {/* Badge */}
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border mb-3 font-mono-custom text-[10px] tracking-widest uppercase">
+                      {isAdmin ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                          <span className="text-purple-300">ISOMER CORE TEAM</span>
+                        </>
+                      ) : isCreator ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
+                          <span className="text-eg">ISOMER CREATOR</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-white/40" />
+                          <span className="text-white/60">COMMUNITY MEMBER</span>
+                        </>
+                      )}
                     </div>
+
                     <h1 className="font-display text-3xl md:text-4xl font-bold tracking-wide text-white">
                       {profile.full_name || 'ISOMER Member'}
                     </h1>
+
                     {profile.bio && (
-                      <p className="font-sans text-sm text-white/60 mt-2 leading-relaxed max-w-xl">
+                      <p className="font-sans text-sm text-white/70 mt-2 leading-relaxed max-w-2xl">
                         {profile.bio}
                       </p>
                     )}
                   </div>
 
                   {/* Stats row */}
-                  <div className="flex flex-wrap gap-4 justify-center md:justify-start">
+                  <div className="flex flex-wrap gap-3 justify-center md:justify-start">
                     <div className="flex items-center gap-2 px-4 py-2 rounded-xl border border-eg/20 bg-dark-200/60">
                       <svg className="w-4 h-4 text-eg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -256,6 +339,7 @@ const PublicProfile: React.FC = () => {
                         {projects.length === 1 ? 'Project' : 'Projects'}
                       </span>
                     </div>
+
                     {profile.created_at && (
                       <div className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 bg-dark-200/60">
                         <svg className="w-4 h-4 text-white/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -271,7 +355,7 @@ const PublicProfile: React.FC = () => {
 
                   {/* Social Links */}
                   {socialEntries.length > 0 && (
-                    <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+                    <div className="flex flex-wrap gap-2 justify-center md:justify-start pt-1">
                       {socialEntries.map(([platform, url]) => (
                         <a
                           key={platform}
@@ -326,8 +410,19 @@ const PublicProfile: React.FC = () => {
                       <path d="M9 9h6M9 12h6" strokeLinecap="round" />
                     </svg>
                   </div>
-                  <p className="font-display text-sm tracking-widest text-white uppercase">NO PUBLISHED PROJECTS YET</p>
-                  <p className="font-mono-custom text-xs text-eg/50 tracking-wider">This creator hasn't published any projects yet.</p>
+                  <p className="font-display text-sm tracking-widest text-white uppercase">
+                    NO PUBLISHED PROJECTS YET
+                  </p>
+                  <p className="font-mono-custom text-xs text-eg/50 tracking-wider">
+                    {isOwnProfile
+                      ? 'You have not uploaded any published projects yet.'
+                      : 'This creator has not published any projects yet.'}
+                  </p>
+                  {isOwnProfile && isCreator && (
+                    <Link to="/creator" className="btn-primary text-xs py-2 px-4 mt-2">
+                      Upload Project via Creator Dashboard →
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -345,7 +440,7 @@ const PublicProfile: React.FC = () => {
       <footer className="border-t border-eg/10 py-6 mt-auto">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           <p className="font-mono-custom text-[10px] tracking-widest text-white/20 uppercase">
-            © 2025 ISOMER. All rights reserved.
+            © 2026 ISOMER. All rights reserved.
           </p>
           <p className="font-mono-custom text-[10px] tracking-widest text-white/15 uppercase hidden sm:block">
             Focus · Create · Elevate

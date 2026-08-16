@@ -1,12 +1,18 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { useUserProfile, useCreatorApplication } from '../lib/hooks';
+import { useCreatorApplication } from '../lib/hooks';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import ProfileNotifications from '../components/ProfileNotifications';
 import { logAuthEvent } from '../lib/activityLog';
-import type { SocialLinks } from '../lib/types';
-import { isAdminRole, isCreatorRole, isOwner, formatRoleLabel } from '../lib/roles';
+import type { SocialLinks, UserProfile } from '../lib/types';
+import {
+  isAdminRole,
+  isOwner,
+  formatRoleLabel,
+  getRoleBadgeClasses,
+  resolveUserRole,
+} from '../lib/roles';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isValidUUID = (v?: string | null): v is string => !!v && UUID_REGEX.test(v);
@@ -37,8 +43,91 @@ const SOCIAL_ICONS: Record<string, React.ReactNode> = {
 
 const UserDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { profile, loading, error } = useUserProfile();
   const { application, loading: appLoading } = useCreatorApplication();
+
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  const fetchProfile = useCallback(async () => {
+    setProfileLoading(true);
+    setProfileError(null);
+
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+
+    if (userErr || !userData?.user) {
+      if (userErr) {
+        console.error('[UserDashboard] getUser() failed:', userErr);
+      }
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
+    const user = userData.user;
+
+    const { data, error: fetchErr } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, avatar_url, role, bio, about, date_of_birth, social_links, creator_approved_at, first_project_uploaded_at, creator_requirement_status, created_at, updated_at')
+      .eq('id', user.id)
+      .single();
+
+    if (fetchErr) {
+      console.error('[UserDashboard] profiles SELECT failed:', {
+        userId: user.id,
+        code: fetchErr.code,
+        message: fetchErr.message,
+      });
+      setProfileError(fetchErr.message || 'Failed to load profile');
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
+    if (!data) {
+      console.warn('[UserDashboard] No profile row found for userId:', user.id);
+      setProfileError('Profile not found');
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
+    const row = data as UserProfile;
+    row.role = resolveUserRole(row.id, row.role);
+    if (row.social_links && typeof row.social_links !== 'object') {
+      try {
+        row.social_links = JSON.parse(row.social_links as unknown as string) as SocialLinks;
+      } catch {
+        row.social_links = {};
+      }
+    }
+
+    setProfile(row);
+    setProfileLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchProfile();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        setProfile(null);
+        setProfileLoading(false);
+      } else {
+        fetchProfile();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile]);
+
+  const effectiveRole = resolveUserRole(profile?.id, profile?.role);
+  const isUserOwner = isOwner(profile);
+  const isUserAdmin = isAdminRole(effectiveRole, profile?.id);
+  const isUserCreator = profile?.role === 'creator';
+  const isNormalUser = profile?.role === 'user';
 
   const handleLogout = async () => {
     await logAuthEvent('user_logout', { email: profile?.email ?? undefined, method: 'user_dashboard' });
@@ -76,7 +165,7 @@ const UserDashboard: React.FC = () => {
   const socialLinks = (profile?.social_links || {}) as SocialLinks;
   const socialEntries = Object.entries(socialLinks).filter(([, v]) => v);
 
-  if (loading || appLoading) {
+  if (profileLoading || appLoading) {
     return (
       <div className="min-h-screen bg-dark bg-circuit flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -100,7 +189,7 @@ const UserDashboard: React.FC = () => {
             </Link>
             <div className="h-5 w-px bg-eg/20 hidden sm:block" />
             <span className="font-mono-custom text-[10px] tracking-widest text-eg/80 uppercase bg-eg/10 px-2.5 py-1 rounded border border-eg/30 hidden sm:inline-block">
-              USER DASHBOARD
+              {isUserOwner ? 'OWNER DASHBOARD' : isUserAdmin ? 'ADMIN DASHBOARD' : 'USER DASHBOARD'}
             </span>
           </div>
 
@@ -112,7 +201,7 @@ const UserDashboard: React.FC = () => {
               Public Site ↗
             </Link>
 
-            {profile?.role === 'admin' && (
+            {isUserAdmin && (
               <Link
                 to="/admin"
                 className="font-mono-custom text-xs text-eg hover:bg-eg/10 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-eg/40 bg-eg/5"
@@ -121,7 +210,7 @@ const UserDashboard: React.FC = () => {
               </Link>
             )}
 
-            {isCreatorRole(profile?.role) && (
+            {isUserCreator && (
               <Link
                 to="/creator"
                 className="font-mono-custom text-xs text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-purple-500/40 bg-purple-500/5"
@@ -146,9 +235,9 @@ const UserDashboard: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-12 space-y-8">
-        {error && (
+        {profileError && (
           <div className="p-4 rounded-xl border border-red-500/40 bg-red-500/10 flex items-center gap-3">
-            <span className="font-mono-custom text-xs text-red-400">Error loading profile: {error}</span>
+            <span className="font-mono-custom text-xs text-red-400">Error loading profile: {profileError}</span>
           </div>
         )}
 
@@ -185,10 +274,10 @@ const UserDashboard: React.FC = () => {
             {/* Profile Info */}
             <div className="flex-1 text-center md:text-left space-y-4">
               <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-eg/30 bg-eg/10 mb-2">
+                <div className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full border mb-2 font-mono-custom text-[10px] tracking-widest uppercase ${getRoleBadgeClasses(effectiveRole, profile?.id)}`}>
                   <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
-                  <span className="font-mono-custom text-[10px] tracking-widest text-eg uppercase">
-                    ROLE: {formatRoleLabel(profile?.role)}
+                  <span>
+                    ROLE: {formatRoleLabel(effectiveRole, profile?.id)}
                   </span>
                 </div>
                 <h1 className="font-display text-2xl md:text-3xl font-bold tracking-wide text-white">
@@ -245,8 +334,30 @@ const UserDashboard: React.FC = () => {
                   </Link>
                 )}
 
-                {/* Creator application / dashboard actions */}
-                {!isOwner(profile) && !isAdminRole(profile?.role) && !isCreatorRole(profile?.role) && (
+                {/* Admin console button for Owner and Admins */}
+                {isUserAdmin && (
+                  <Link
+                    to="/admin"
+                    id="dashboard-admin-btn"
+                    className="btn-primary py-2 px-5 text-xs flex items-center gap-2 bg-eg/20 text-eg border border-eg hover:bg-eg/30"
+                  >
+                    ADMIN CONSOLE ↗
+                  </Link>
+                )}
+
+                {/* Creator dashboard button for creators */}
+                {isUserCreator && (
+                  <Link
+                    to="/creator"
+                    id="dashboard-creator-btn"
+                    className="btn-outline py-2 px-5 text-xs flex items-center gap-2 border-purple-500/40 text-purple-400 hover:bg-purple-500/10"
+                  >
+                    CREATOR DASHBOARD ↗
+                  </Link>
+                )}
+
+                {/* Creator application / dashboard actions (for normal users ONLY) */}
+                {isNormalUser && (
                   application?.status === 'pending' ? (
                     <span className="btn-outline py-2 px-5 text-xs flex items-center gap-2 opacity-60 cursor-default border-amber-500/30 text-amber-400">
                       APPLICATION PENDING
@@ -259,15 +370,6 @@ const UserDashboard: React.FC = () => {
                       BECOME A CREATOR
                     </Link>
                   )
-                )}
-
-                {isCreatorRole(profile?.role) && (
-                  <Link
-                    to="/creator"
-                    className="btn-primary py-2 px-5 text-xs flex items-center gap-2"
-                  >
-                    CREATOR DASHBOARD
-                  </Link>
                 )}
               </div>
             </div>
@@ -289,7 +391,8 @@ const UserDashboard: React.FC = () => {
         )}
 
         {/* Notifications Section */}
-        <ProfileNotifications userRole={profile?.role} />
+        <ProfileNotifications userRole={effectiveRole} />
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-dark-200/60 p-4 rounded-xl border border-white/5">
             <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">
@@ -306,7 +409,7 @@ const UserDashboard: React.FC = () => {
             </p>
             <p className="font-mono-custom text-sm text-eg font-medium flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
-              AUTHENTICATED
+              AUTHENTICATED ({formatRoleLabel(effectiveRole, profile?.id)})
             </p>
           </div>
 
