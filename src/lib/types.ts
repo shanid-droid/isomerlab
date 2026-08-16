@@ -152,6 +152,133 @@ export interface SiteSettings {
   updated_by?: string | null;
 }
 
+export type LeaderboardType = 'projects' | 'creators';
+export type LeaderboardPeriod = 'all_time' | 'monthly' | 'weekly';
+export type LeaderboardVisibility = 'public' | 'creators_only' | 'admins_only' | 'no_one';
+export type LeaderboardSnapshotStatus = 'draft' | 'published' | 'archived';
+
+export interface LeaderboardSettings {
+  id: number;
+  enabled: boolean;
+  project_enabled: boolean;
+  creator_enabled: boolean;
+  visibility: LeaderboardVisibility;
+  project_like_weight: number;
+  project_comment_weight: number;
+  project_view_weight: number;
+  github_bonus: number;
+  gallery_bonus: number;
+  recency_decay_days: number;
+  creator_project_weight: number;
+  creator_like_weight: number;
+  creator_comment_weight: number;
+  creator_activity_weight: number;
+  creator_top3_bonus: number;
+  creator_top10_bonus: number;
+  weekly_enabled: boolean;
+  monthly_enabled: boolean;
+  all_time_enabled: boolean;
+  updated_at?: string;
+  updated_by?: string | null;
+}
+
+export interface LeaderboardSnapshot {
+  id: string;
+  leaderboard_type: LeaderboardType;
+  period: LeaderboardPeriod;
+  status: LeaderboardSnapshotStatus;
+  visibility: LeaderboardVisibility;
+  published_at?: string | null;
+  published_by?: string | null;
+  created_at: string;
+}
+
+export interface ProjectLeaderboardMetadata {
+  title: string;
+  slug: string;
+  thumbnail_url?: string | null;
+  created_by?: string | null;
+  creator_name?: string | null;
+  creator_avatar?: string | null;
+  views_count?: number;
+  github_bonus?: boolean;
+  gallery_bonus?: boolean;
+}
+
+export interface CreatorLeaderboardMetadata {
+  creator_name: string;
+  creator_avatar?: string | null;
+  creator_bio?: string | null;
+  top_project_id?: string | null;
+  top_project_title?: string | null;
+  top_project_slug?: string | null;
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  snapshot_id: string;
+  entity_type: 'project' | 'creator';
+  entity_id: string;
+  rank: number;
+  score: number;
+  likes: number;
+  comments: number;
+  projects_count: number;
+  activity_score: number;
+  metadata: ProjectLeaderboardMetadata | CreatorLeaderboardMetadata | Record<string, unknown>;
+  is_overridden?: boolean;
+  override_notes?: string | null;
+  published_at?: string | null;
+  created_at?: string;
+}
+
+export interface LiveProjectLeaderboardItem {
+  rank: number;
+  project_id: string;
+  title: string;
+  slug: string;
+  thumbnail_url?: string | null;
+  created_by?: string | null;
+  creator_name: string;
+  creator_avatar?: string | null;
+  score: number;
+  likes_count: number;
+  comments_count: number;
+  views_count: number;
+  github_bonus_applied: boolean;
+  gallery_bonus_applied: boolean;
+  created_at: string;
+  is_overridden?: boolean;
+  override_notes?: string | null;
+}
+
+export interface LiveCreatorLeaderboardItem {
+  rank: number;
+  creator_id: string;
+  creator_name: string;
+  creator_avatar?: string | null;
+  creator_bio?: string | null;
+  score: number;
+  projects_count: number;
+  total_likes_received: number;
+  total_comments_received: number;
+  top_project_id?: string | null;
+  top_project_title?: string | null;
+  top_project_slug?: string | null;
+  activity_score: number;
+  created_at: string;
+  is_overridden?: boolean;
+  override_notes?: string | null;
+}
+
+export interface MyCreatorRank {
+  rank: number | null;
+  score: number | null;
+  total_creators: number;
+  rank_delta: number;
+  is_creator: boolean;
+}
+
 /** Project with creator profile info joined in */
 export interface ProjectWithCreator extends Project {
   creator_name?: string | null;
@@ -212,6 +339,15 @@ export type Database = {
       };
       notification_reads: {
         Row: NotificationRead;
+      };
+      leaderboard_settings: {
+        Row: LeaderboardSettings;
+      };
+      leaderboard_snapshots: {
+        Row: LeaderboardSnapshot;
+      };
+      leaderboard_entries: {
+        Row: LeaderboardEntry;
       };
     };
   };

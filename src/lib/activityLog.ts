@@ -90,6 +90,11 @@ export function formatActivityAction(action: string): string {
     notification_updated: 'Notification updated',
     notification_deleted: 'Notification deleted',
     notification_read: 'Notification read',
+    leaderboard_snapshot_generated: 'Leaderboard snapshot generated',
+    leaderboard_published: 'Leaderboard snapshot published',
+    leaderboard_unpublished: 'Leaderboard snapshot unpublished',
+    leaderboard_settings_updated: 'Leaderboard settings updated',
+    leaderboard_score_override: 'Leaderboard score override applied',
   };
   if (labels[action]) return labels[action];
   return action
@@ -131,6 +136,11 @@ export const ACTION_FILTER_GROUPS: { key: string; label: string; actions: string
     actions: ['creator_application_submitted', 'creator_application_approved', 'creator_application_rejected', 'creator_project_uploaded', 'creator_requirement_completed'],
   },
   {
+    key: 'leaderboard',
+    label: 'Leaderboard',
+    actions: ['leaderboard_snapshot_generated', 'leaderboard_published', 'leaderboard_unpublished', 'leaderboard_settings_updated', 'leaderboard_score_override'],
+  },
+  {
     key: 'system',
     label: 'System',
     actions: ['maintenance_mode_enabled', 'maintenance_mode_disabled'],
@@ -143,7 +153,7 @@ export const ACTION_FILTER_GROUPS: { key: string; label: string; actions: string
 ];
 
 /** Category filter for activity logs */
-export type ActivityCategory = 'all' | 'auth' | 'profile' | 'project' | 'admin' | 'contact' | 'creator' | 'system' | 'notifications';
+export type ActivityCategory = 'all' | 'auth' | 'profile' | 'project' | 'admin' | 'contact' | 'creator' | 'leaderboard' | 'system' | 'notifications';
 
 export function getActivityCategory(action: string, targetType?: string | null): ActivityCategory {
   if (action.startsWith('user_') && (action.includes('login') || action.includes('logout') || action.includes('registered') || action.includes('oauth') || action.includes('failed'))) {
@@ -154,9 +164,11 @@ export function getActivityCategory(action: string, targetType?: string | null):
   if (action.includes('promoted') || action.includes('demoted') || action.includes('role_changed')) return 'admin';
   if (action.startsWith('contact_')) return 'contact';
   if (action.startsWith('creator_')) return 'creator';
+  if (action.startsWith('leaderboard_')) return 'leaderboard';
   if (action.startsWith('maintenance_')) return 'system';
   if (action.startsWith('notification_')) return 'notifications';
   if (targetType === 'creator_application') return 'creator';
+  if (targetType === 'leaderboard_snapshot' || targetType === 'leaderboard_settings' || targetType === 'leaderboard_entry') return 'leaderboard';
   if (targetType === 'site_settings') return 'system';
   if (targetType === 'auth') return 'auth';
   if (targetType === 'profile') return 'profile';
@@ -177,6 +189,8 @@ export function formatActivitySummary(
   const fullName = details.full_name as string | undefined;
   const oldRole = details.old_role as string | undefined;
   const newRole = details.new_role as string | undefined;
+  const lbType = details.type as string | undefined;
+  const lbPeriod = details.period as string | undefined;
 
   switch (action) {
     case 'user_registered':
@@ -215,6 +229,16 @@ export function formatActivitySummary(
     case 'creator_project_uploaded':
     case 'creator_requirement_completed':
       return title ? `Project: ${title}` : fullName ?? 'Creator activity';
+    case 'leaderboard_snapshot_generated':
+      return `Generated ${lbType ?? 'leaderboard'} (${lbPeriod ?? 'all_time'})`;
+    case 'leaderboard_published':
+      return `Published ${lbType ?? 'leaderboard'} (${lbPeriod ?? 'all_time'})`;
+    case 'leaderboard_unpublished':
+      return `Unpublished ${lbType ?? 'leaderboard'} (${lbPeriod ?? 'all_time'})`;
+    case 'leaderboard_settings_updated':
+      return 'Leaderboard scoring settings updated';
+    case 'leaderboard_score_override':
+      return 'Leaderboard score manual override';
     case 'maintenance_mode_enabled':
     case 'maintenance_mode_disabled':
       return 'Site maintenance mode changed';

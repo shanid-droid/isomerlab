@@ -46,6 +46,7 @@ export const Navbar: React.FC = () => {
   const [menuOpen, setMenuOpen]   = useState(false);
   const [active,   setActive]     = useState('home');
   const [hasSession, setHasSession] = useState(false);
+  const [leaderboardVisible, setLeaderboardVisible] = useState(true);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -56,6 +57,18 @@ export const Navbar: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setHasSession(!!session?.user);
     });
+
+    // Check leaderboard visibility
+    supabase
+      .from('leaderboard_settings')
+      .select('enabled, visibility')
+      .eq('id', 1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setLeaderboardVisible(data.enabled && data.visibility !== 'no_one');
+        }
+      });
 
     return () => {
       window.removeEventListener('scroll', onScroll);
@@ -75,6 +88,7 @@ export const Navbar: React.FC = () => {
     setMenuOpen(false);
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
+    else window.location.href = `/#${id}`;
   };
 
   return (
@@ -100,6 +114,15 @@ export const Navbar: React.FC = () => {
               {l.label}
             </button>
           ))}
+          {leaderboardVisible && (
+            <Link
+              to="/leaderboard"
+              className="nav-link text-white/80 hover:text-eg flex items-center gap-1.5"
+            >
+              <span>Leaderboard</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-eg animate-pulse" />
+            </Link>
+          )}
         </nav>
 
         {/* CTA & User Portal link */}
@@ -140,7 +163,7 @@ export const Navbar: React.FC = () => {
       </div>
 
       {/* Mobile drawer */}
-      <div className={`md:hidden overflow-hidden transition-all duration-500 ${menuOpen ? 'max-h-80' : 'max-h-0'}`}>
+      <div className={`md:hidden overflow-hidden transition-all duration-500 ${menuOpen ? 'max-h-96' : 'max-h-0'}`}>
         <nav className="flex flex-col gap-1 px-6 pt-4 pb-6 glass-dark border-t border-eg/10">
           {links.map(l => (
             <button
@@ -151,6 +174,16 @@ export const Navbar: React.FC = () => {
               {l.label}
             </button>
           ))}
+          {leaderboardVisible && (
+            <Link
+              to="/leaderboard"
+              onClick={() => setMenuOpen(false)}
+              className="nav-link text-left py-3 border-b border-eg/5 text-eg font-mono-custom text-xs flex items-center justify-between"
+            >
+              <span>→ Community Leaderboard</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-eg" />
+            </Link>
+          )}
           <Link
             to={hasSession ? "/dashboard" : "/login"}
             className="nav-link text-left py-3 border-b border-eg/5 text-eg font-mono-custom text-xs"

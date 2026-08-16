@@ -12,6 +12,8 @@ import CreatorApplicationsPanel from '../components/admin/CreatorApplicationsPan
 import SiteControlPanel from '../components/admin/SiteControlPanel';
 import NotificationsPanel from '../components/admin/NotificationsPanel';
 import { CommentsManagementPanel } from '../components/admin/CommentsManagementPanel';
+import { LeaderboardControlPanel } from '../components/admin/LeaderboardControlPanel';
+import { LeaderboardPublishingPanel } from '../components/admin/LeaderboardPublishingPanel';
 import { OWNER_ID } from '../lib/constants';
 import {
   formatRoleLabel,
@@ -38,7 +40,7 @@ const ExternalLinkIcon: React.FC<{ className?: string }> = ({ className = 'w-3 h
   </svg>
 );
 
-type AdminTab = 'overview' | 'projects' | 'users' | 'inbox' | 'activity' | 'applications' | 'site-control' | 'notifications' | 'comments';
+type AdminTab = 'overview' | 'projects' | 'users' | 'inbox' | 'activity' | 'applications' | 'site-control' | 'notifications' | 'comments' | 'leaderboard';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -846,6 +848,17 @@ const AdminDashboard: React.FC = () => {
           >
             💬 COMMENTS
           </button>
+          {/* Leaderboard Management — visible to all admins (Owner gets controls, Admin gets publishing) */}
+          <button
+            onClick={() => setActiveTab('leaderboard')}
+            className={`font-mono-custom text-xs tracking-widest px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+              activeTab === 'leaderboard'
+                ? 'bg-eg/15 text-eg border border-eg/40 shadow-eg-sm'
+                : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            🏆 LEADERBOARD
+          </button>
         </div>
 
         {/* ── OVERVIEW TAB (Owner only) ───────────────────────────── */}
@@ -885,6 +898,11 @@ const AdminDashboard: React.FC = () => {
         {/* ── COMMENTS MODERATION TAB (Owner + Admin) ───────────────────── */}
         {activeTab === 'comments' && (
           <CommentsManagementPanel />
+        )}
+
+        {/* ── LEADERBOARD TAB (Owner gets control, Admin gets publishing) ─── */}
+        {activeTab === 'leaderboard' && (
+          isOwner ? <LeaderboardControlPanel /> : <LeaderboardPublishingPanel />
         )}
 
         {activeTab === 'projects' && (

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProjectBySlug } from '../lib/hooks';
+import { useRecordProjectView } from '../lib/leaderboardHooks';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
 import type { UserProfile } from '../lib/types';
@@ -205,6 +206,7 @@ const CreatorChip: React.FC<{ creatorId: string }> = ({ creatorId }) => {
 const ProjectDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const { project, gallery, loading, error } = useProjectBySlug(slug);
+  useRecordProjectView(project?.id);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const headerRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
