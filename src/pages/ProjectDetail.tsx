@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useProjectBySlug } from '../lib/hooks';
+import { useProjectVersions } from '../lib/projectVersionHooks';
 import { useRecordProjectView } from '../lib/leaderboardHooks';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
-import type { UserProfile } from '../lib/types';
+import type { UserProfile, ProjectVersion, ProjectLink } from '../lib/types';
 import { LikeButton } from '../components/LikeButton';
 import { ProjectCommentsSection } from '../components/ProjectCommentsSection';
 import { ProjectLinksDisplay } from '../components/ProjectLinks';
@@ -89,9 +90,8 @@ const LightboxModal: React.FC<{
               <button
                 key={idx}
                 onClick={() => onSelectIndex(idx)}
-                className={`w-14 h-10 rounded-lg overflow-hidden border transition-all flex-shrink-0 ${
-                  idx === currentIndex ? 'border-eg ring-2 ring-eg/50 scale-105' : 'border-white/20 opacity-50 hover:opacity-100'
-                }`}
+                className={`w-14 h-10 rounded-lg overflow-hidden border transition-all flex-shrink-0 ${idx === currentIndex ? 'border-eg ring-2 ring-eg/50 scale-105' : 'border-white/20 opacity-50 hover:opacity-100'
+                  }`}
               >
                 <img src={url} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
               </button>
@@ -200,6 +200,8 @@ const CreatorChip: React.FC<{ creatorId: string }> = ({ creatorId }) => {
 const ProjectDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const { project, gallery, loading, error } = useProjectBySlug(slug);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { versions: projectVersions } = useProjectVersions(project?.id);
   useRecordProjectView(project?.id);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -212,7 +214,6 @@ const ProjectDetail: React.FC = () => {
 
     const headerHeight = header.getBoundingClientRect().height;
 
-    // Layout position (unaffected by the article fade-in transform)
     let heroDocumentTop = 0;
     let el: HTMLElement | null = hero;
     while (el) {
@@ -253,10 +254,48 @@ const ProjectDetail: React.FC = () => {
     return [];
   };
 
-  const componentsList = parseComponents(project?.components);
-  const galleryUrls = gallery.map((item) => item.image_url);
+  // Version selection logic
+  const versionIdFromUrl = searchParams.get('version');
+  const activeVersion: ProjectVersion | undefined = React.useMemo(() => {
+    if (!projectVersions || projectVersions.length === 0) return undefined;
+    if (versionIdFromUrl) {
+      const found = projectVersions.find(v => v.id === versionIdFromUrl);
+      if (found) return found;
+    }
+    const defaultVer = projectVersions.find(v => v.is_default);
+    if (defaultVer) return defaultVer;
+    return projectVersions[0];
+  }, [projectVersions, versionIdFromUrl]);
 
-  const descriptionText = project?.description || '';
+  const handleVersionChange = (versionId: string) => {
+    if (versionId) {
+      setSearchParams({ version: versionId }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  };
+
+  const componentsList = parseComponents(project?.components);
+
+  // Version-specific content (fall back to project-level data for backward compatibility)
+  const versionDescription = activeVersion?.description ?? project?.description ?? '';
+  const versionLinks = (activeVersion?.project_links && activeVersion.project_links.length > 0)
+    ? activeVersion.project_links
+    : (project?.project_links ?? []);
+  const versionThumbnail = activeVersion?.thumbnail_url ?? project?.thumbnail_url ?? null;
+  const versionGallery = React.useMemo(() => {
+    if (!activeVersion) return gallery;
+    const matched = gallery.filter(item => item.version_id === activeVersion.id);
+    if (matched.length > 0) return matched;
+    // Fallback: If this is the default version, include untagged legacy images
+    if (activeVersion.is_default) {
+      const untagged = gallery.filter(item => !item.version_id);
+      if (untagged.length > 0) return untagged;
+    }
+    return matched;
+  }, [gallery, activeVersion]);
+
+  const descriptionText = versionDescription || '';
   const firstParagraphEnd = descriptionText.indexOf('\n\n');
   const shortIntro = firstParagraphEnd !== -1 ? descriptionText.substring(0, firstParagraphEnd) : null;
   const mainDescription = firstParagraphEnd !== -1 ? descriptionText.substring(firstParagraphEnd).trim() : descriptionText;
@@ -317,10 +356,10 @@ const ProjectDetail: React.FC = () => {
 
             {/* 2. Hero Thumbnail */}
             <div ref={heroRef} className="relative rounded-2xl overflow-hidden border border-eg/30 glass shadow-2xl bg-dark-300 group">
-              {project.thumbnail_url ? (
+              {versionThumbnail ? (
                 <div className="w-full h-[320px] sm:h-[420px] md:h-[500px] overflow-hidden relative">
                   <img
-                    src={project.thumbnail_url}
+                    src={versionThumbnail}
                     alt={project.title}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   />
@@ -355,14 +394,38 @@ const ProjectDetail: React.FC = () => {
               </div>
             </div>
 
+            {/* 2.5 Version Selector */}
+            {projectVersions.length > 1 && (
+              <div className="flex items-center gap-3 pt-2">
+                <span className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase">VERSION</span>
+                <select
+                  value={activeVersion?.id ?? ''}
+                  onChange={(e) => handleVersionChange(e.target.value)}
+                  className="bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-2 text-xs text-white font-mono-custom focus:outline-none focus:border-eg focus:ring-1 focus:ring-eg transition-all"
+                >
+                  {projectVersions.map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.version_number} — {v.version_name}
+                      {v.is_default ? ' (default)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* 3. Title & GitHub */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-eg/15">
               <div className="space-y-3 max-w-2xl">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="w-8 h-px bg-eg" />
                   <span className="font-mono-custom text-xs tracking-widest text-eg uppercase font-semibold">
                     PROJECT SPECIFICATION
                   </span>
+                  {activeVersion && (
+                    <span className="font-mono-custom text-[10px] tracking-widest text-eg/90 uppercase px-2 py-0.5 rounded border border-eg/30 bg-eg/10">
+                      v{activeVersion.version_number} — {activeVersion.version_name}
+                    </span>
+                  )}
                 </div>
                 <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold tracking-wider text-white leading-tight text-glow-sm">
                   {project.title}
@@ -370,7 +433,7 @@ const ProjectDetail: React.FC = () => {
               </div>
 
               <ProjectLinksDisplay
-                links={project.project_links}
+                links={versionLinks as ProjectLink[] | null}
                 fallbackGithubUrl={project.github_url}
                 variant="hero"
               />
@@ -451,27 +514,27 @@ const ProjectDetail: React.FC = () => {
                 <h3 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-eg" />
                   PROJECT GALLERY
-                  {galleryUrls.length > 0 && (
-                    <span className="text-eg font-semibold">({galleryUrls.length})</span>
+                  {versionGallery.length > 0 && (
+                    <span className="text-eg font-semibold">({versionGallery.length})</span>
                   )}
                 </h3>
-                {galleryUrls.length > 0 && (
+                {versionGallery.length > 0 && (
                   <span className="font-mono-custom text-[10px] text-white/30 uppercase tracking-widest">
                     CLICK IMAGE TO ENLARGE
                   </span>
                 )}
               </div>
 
-              {galleryUrls.length > 0 ? (
+              {versionGallery.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-                  {galleryUrls.map((imageUrl, idx) => (
+                  {versionGallery.map((item, idx) => (
                     <div
-                      key={idx}
+                      key={item.id}
                       onClick={() => setSelectedImageIndex(idx)}
                       className="group relative rounded-2xl overflow-hidden glass border border-eg/20 h-52 cursor-pointer transition-all duration-500 hover:border-eg/70 hover:shadow-eg-sm"
                     >
                       <img
-                        src={imageUrl}
+                        src={item.image_url}
                         alt={`Gallery media ${idx + 1}`}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                         loading="lazy"
@@ -510,7 +573,7 @@ const ProjectDetail: React.FC = () => {
                 BACK TO ALL PROJECTS
               </Link>
               <ProjectLinksDisplay
-                links={project.project_links}
+                links={versionLinks as ProjectLink[] | null}
                 fallbackGithubUrl={project.github_url}
                 variant="compact"
               />
@@ -520,9 +583,9 @@ const ProjectDetail: React.FC = () => {
       </main>
 
       {/* Lightbox */}
-      {selectedImageIndex !== null && galleryUrls.length > 0 && (
+      {selectedImageIndex !== null && versionGallery.length > 0 && (
         <LightboxModal
-          images={galleryUrls}
+          images={versionGallery.map(item => item.image_url)}
           currentIndex={selectedImageIndex}
           onClose={() => setSelectedImageIndex(null)}
           onSelectIndex={(idx) => setSelectedImageIndex(idx)}

@@ -63,11 +63,30 @@ export interface Project {
   published?: boolean;
   created_by?: string | null;
   created_at?: string;
+  versions?: ProjectVersion[] | null;
+}
+
+export interface ProjectVersion {
+  id: string;
+  project_id: string;
+  version_name: string;
+  version_number: string;
+  description?: string | null;
+  whats_new?: string | null;
+  thumbnail_url?: string | null;
+  video_url?: string | null;
+  project_links?: ProjectLink[] | null;
+  sort_order: number;
+  is_default: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProjectGalleryItem {
   id: string;
   project_id: string;
+  version_id?: string | null;
   image_url: string;
   sort_order?: number;
   created_at?: string;
@@ -366,6 +385,9 @@ export type Database = {
       };
       leaderboard_entries: {
         Row: LeaderboardEntry;
+      };
+      project_versions: {
+        Row: ProjectVersion;
       };
     };
   };
