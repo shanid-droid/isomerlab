@@ -8,7 +8,14 @@ export const CommentsManagementPanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'deleted'>('all');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   const fetchComments = useCallback(async () => {
     setLoading(true);
@@ -61,15 +68,17 @@ export const CommentsManagementPanel: React.FC = () => {
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
 
-  const handleDelete = async (commentId: string) => {
-    if (!confirm('Are you sure you want to delete this comment?')) return;
-    setProcessingId(commentId);
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return;
+    setProcessingId(confirmDeleteId);
     try {
-      const { error } = await supabase.rpc('soft_delete_project_comment', { p_comment_id: commentId });
+      const { error } = await supabase.rpc('soft_delete_project_comment', { p_comment_id: confirmDeleteId });
       if (error) throw error;
+      setConfirmDeleteId(null);
       await fetchComments();
+      showToast('Comment deleted successfully.');
     } catch (err: any) {
-      alert(err.message ?? 'Failed to delete comment');
+      showToast(err.message ?? 'Failed to delete comment', 'error');
     } finally {
       setProcessingId(null);
     }
@@ -122,6 +131,17 @@ export const CommentsManagementPanel: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {toastMsg && (
+        <div className={`p-4 rounded-xl border font-mono-custom text-xs flex items-center justify-between gap-3 animate-fade-in ${
+          toastMsg.type === 'success'
+            ? 'border-eg/40 bg-eg/10 text-eg'
+            : 'border-red-500/40 bg-red-500/10 text-red-300'
+        }`}>
+          <span>{toastMsg.type === 'success' ? '✓ ' : '✕ '}{toastMsg.text}</span>
+          <button onClick={() => setToastMsg(null)} className="text-white/40 hover:text-white text-xs">✕</button>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 rounded-xl border border-red-500/40 bg-red-500/10 text-xs text-red-300 font-mono-custom">{error}</div>
@@ -177,7 +197,7 @@ export const CommentsManagementPanel: React.FC = () => {
                       <td className="py-3 px-4 text-right">
                         {!isDeleted && (
                           <button
-                            onClick={() => handleDelete(c.id)}
+                            onClick={() => setConfirmDeleteId(c.id)}
                             disabled={processingId === c.id}
                             className="px-2.5 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 font-mono-custom text-[10px]"
                           >
@@ -193,6 +213,37 @@ export const CommentsManagementPanel: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Delete Comment Confirm Dialog */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="glass rounded-2xl border border-red-500/40 p-6 max-w-md w-full space-y-4">
+            <h3 className="font-display text-sm font-bold text-white">Delete Comment</h3>
+            <p className="font-sans text-xs text-white/70">
+              Are you sure you want to permanently moderate and soft-delete this project comment?
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(null)}
+                disabled={!!processingId}
+                className="px-4 py-2 rounded-xl border border-white/15 font-mono-custom text-xs text-white/60 hover:text-white hover:border-white/30 transition-colors"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={!!processingId}
+                className="px-4 py-2 rounded-xl font-mono-custom text-xs bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30 transition-colors flex items-center gap-2"
+              >
+                {processingId && <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />}
+                {processingId ? 'DELETING...' : 'DELETE COMMENT'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

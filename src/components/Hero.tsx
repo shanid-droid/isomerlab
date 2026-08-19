@@ -1,230 +1,173 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ArrowRight } from './ui';
 
-/* ── Typing text effect ─────────────────────────────────────────── */
-const words = ['ENGINEER', 'INNOVATOR', 'CREATOR'];
-
-const TypingText: React.FC = () => {
-  const [wordIndex, setWordIndex]   = useState(0);
-  const [charIndex, setCharIndex]   = useState(0);
-  const [deleting,  setDeleting]    = useState(false);
+export const Hero: React.FC = () => {
+  const [mounted, setMounted] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 50, y: 50 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const current = words[wordIndex];
-    let timeout: ReturnType<typeof setTimeout>;
-
-    if (!deleting && charIndex === current.length) {
-      timeout = setTimeout(() => setDeleting(true), 1800);
-    } else if (deleting && charIndex === 0) {
-      setDeleting(false);
-      setWordIndex(i => (i + 1) % words.length);
-    } else {
-      timeout = setTimeout(() => {
-        setCharIndex(i => i + (deleting ? -1 : 1));
-      }, deleting ? 60 : 110);
-    }
-    return () => clearTimeout(timeout);
-  }, [charIndex, deleting, wordIndex]);
-
-  return (
-    <span className="font-display text-xs tracking-[0.3em] text-eg/80">
-      {words[wordIndex].slice(0, charIndex)}
-      <span className="animate-blink">|</span>
-    </span>
-  );
-};
-
-/* ── Hero ────────────────────────────────────────────────────────── */
-const Hero: React.FC = () => {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), 100);
+    // Respect reduced motion
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timer = setTimeout(() => setMounted(true), prefersReducedMotion ? 10 : 80);
     return () => clearTimeout(timer);
   }, []);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    setMousePos({ x, y });
+  };
+
+  const scrollToProjects = () => {
+    document.getElementById('featured-project')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const scrollToLab = () => {
+    document.getElementById('the-lab')?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <section
       id="home"
-      ref={ref}
-      className="relative min-h-screen flex items-center bg-circuit overflow-hidden"
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      className="relative min-h-[92vh] lg:min-h-screen flex items-center justify-center bg-dark overflow-hidden select-none pt-24 pb-16"
     >
-      {/* Ambient green radial glow */}
+      {/* ── Living Background ── */}
+      {/* Technical Grid */}
       <div
-        className="absolute pointer-events-none"
+        className="absolute inset-0 bg-circuit opacity-60 pointer-events-none"
         style={{
-          right: '10%',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          width: '55%',
-          height: '80%',
-          background: 'radial-gradient(ellipse at center, rgba(0,255,136,0.07) 0%, transparent 70%)',
+          maskImage: 'radial-gradient(ellipse 80% 60% at 50% 50%, black 20%, transparent 80%)',
+          WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 50%, black 20%, transparent 80%)',
         }}
       />
 
-      {/* Right decorative vertical text */}
-      <div className="absolute right-6 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-4 items-center">
-        {['ENGINEER', 'INNOVATOR', 'CREATOR'].map((w, i) => (
-          <div key={w} className="flex items-center gap-3">
-            {i > 0 && <div className="w-px h-8 bg-eg/20" />}
-            <span
-              className="font-mono-custom text-[10px] tracking-[0.25em] text-white/30"
-              style={{ writingMode: 'vertical-rl' }}
-            >
-              {w}
-            </span>
-          </div>
-        ))}
+      {/* Mouse-reactive Ambient Glow */}
+      <div
+        className="absolute inset-0 pointer-events-none transition-opacity duration-1000 ease-out"
+        style={{
+          background: `radial-gradient(650px circle at ${mousePos.x}% ${mousePos.y}%, rgba(0, 255, 136, 0.07), transparent 60%)`,
+        }}
+      />
+
+      {/* Soft Center Ambient Light */}
+      <div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] pointer-events-none opacity-40 blur-[120px]"
+        style={{ background: 'radial-gradient(ellipse, rgba(0, 255, 136, 0.15) 0%, transparent 70%)' }}
+      />
+
+      {/* Subtle Horizontal Scanning Line */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-25">
+        <div className="scan-line" />
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 pt-28 pb-16 w-full">
-        <div className="relative glass border border-eg/10 rounded-xl overflow-hidden min-h-[560px] flex">
+      {/* ── Hero Main Content ── */}
+      <div className="max-w-5xl mx-auto px-6 relative z-10 text-center flex flex-col items-center">
+        {/* Top Technical Status Tag */}
+        <div
+          className={`inline-flex items-center gap-2.5 px-3.5 py-1 rounded-full border border-eg/20 bg-dark-200/80 backdrop-blur-md mb-8 transition-all duration-700 ${
+            mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
+          }`}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-eg animate-pulse" />
+          <span className="font-mono-custom text-[11px] tracking-[0.25em] text-white/70 uppercase">
+            ISOMER <span className="text-eg/50">/</span> TECHNOLOGY LABORATORY
+          </span>
+        </div>
 
-          {/* Scan line overlay */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="scan-line" />
-          </div>
-
-          {/* Left content */}
-          <div
-            className={`flex-1 flex flex-col justify-center px-8 md:px-12 lg:px-16 py-12 z-10 transition-all duration-1000 ${
-              visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'
+        {/* ── Powerful Main Heading (Cinematic Staggered Reveal) ── */}
+        <h1 className="font-display font-black text-4xl sm:text-6xl md:text-7xl lg:text-8xl tracking-tight leading-[1.05] text-white max-w-4xl">
+          <span
+            className={`inline-block transition-all duration-700 ease-out ${
+              mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}
+            style={{ transitionDelay: '150ms' }}
           >
-            {/* Brand name */}
-            <div className="mb-3">
-              <h1 className="font-display font-black text-5xl md:text-6xl lg:text-7xl tracking-widest leading-none text-white">
-                ISOM<span className="text-eg text-glow">≡</span>R
-              </h1>
-              <p className="font-mono-custom italic text-eg text-base mt-1 tracking-wider text-glow-sm">
-                Be inspire!
-              </p>
-            </div>
-
-            {/* Divider */}
-            <div className="w-16 h-px bg-eg/40 my-6" />
-
-            {/* Focus block */}
-            <div className="border-l-2 border-eg/50 pl-5 mb-6">
-              {['FOCUS.', 'CREATE.', 'ELEVATE.'].map((line, i) => (
-                <p
-                  key={line}
-                  className={`font-display text-xl md:text-2xl font-medium tracking-widest text-white leading-relaxed transition-all duration-700 ${
-                    visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'
-                  }`}
-                  style={{ transitionDelay: `${200 + i * 120}ms` }}
-                >
-                  {line}
-                </p>
-              ))}
-            </div>
-
-            {/* Tagline */}
-            <p className="font-sans text-sm text-white/50 leading-relaxed mb-8 max-w-xs">
-              STAY DISCIPLINED.{' '}
-              <br />
-              KEEP BUILDING.{' '}
-              <br />
-              MAKE{' '}
-              <span className="text-eg font-semibold text-glow-sm">IMPACT.</span>
-            </p>
-
-            {/* Hexagon badge */}
-            <div className="flex items-center gap-3 mb-8">
-              <div className="relative w-10 h-10 hexagon bg-eg/10 border border-eg/40 flex items-center justify-center shadow-eg-sm">
-                <span className="font-display text-eg font-bold text-sm">I</span>
-              </div>
-              <div>
-                <p className="font-display text-xs tracking-[0.3em] text-white">ISOMER</p>
-                <p className="font-mono-custom text-[10px] text-eg/60 tracking-wider">EST. 2024</p>
-              </div>
-            </div>
-
-            {/* CTA buttons */}
-            <div className="flex flex-wrap gap-4">
-              <button
-                id="hero-explore-btn"
-                className="btn-primary"
-                onClick={() => document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                Explore Projects
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-              <button
-                id="hero-about-btn"
-                className="btn-outline"
-                onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                Learn More
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Right image */}
-          <div
-            className={`relative hidden md:block w-[42%] lg:w-[45%] transition-all duration-1000 delay-300 ${
-              visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'
+            WE BUILD
+          </span>{' '}
+          <span
+            className={`inline-block text-transparent bg-clip-text bg-gradient-to-r from-white via-eg to-eg transition-all duration-700 ease-out text-glow-sm ${
+              mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}
+            style={{ transitionDelay: '350ms' }}
           >
-            {/* Dark image using the provided ISOMER reference as B&W portrait style */}
-            <div className="absolute inset-0">
-              <div
-                className="w-full h-full"
-                style={{
-                  background: 'linear-gradient(135deg, #0d1a12 0%, #0a160e 50%, #081009 100%)',
-                }}
-              />
-              {/* Abstract digital figure overlay */}
-              <svg
-                className="absolute inset-0 w-full h-full opacity-30"
-                viewBox="0 0 400 500"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                preserveAspectRatio="xMidYMid slice"
-              >
-                {/* Circuit traces */}
-                <path d="M200 500 L200 350 L280 350 L280 280 L340 280" stroke="rgba(0,255,136,0.5)" strokeWidth="1" />
-                <path d="M200 500 L200 350 L120 350 L120 280 L60 280" stroke="rgba(0,255,136,0.5)" strokeWidth="1" />
-                <path d="M200 350 L200 200" stroke="rgba(0,255,136,0.3)" strokeWidth="1.5" />
-                <circle cx="280" cy="280" r="4" fill="#00ff88" opacity="0.6" />
-                <circle cx="60" cy="280" r="4" fill="#00ff88" opacity="0.6" />
-                <circle cx="200" cy="200" r="6" fill="#00ff88" opacity="0.4" />
-                {/* Horizontal lines */}
-                {[100, 150, 200, 250, 300, 350, 400].map(y => (
-                  <line key={y} x1="0" y1={y} x2="400" y2={y} stroke="rgba(0,255,136,0.04)" strokeWidth="1" />
-                ))}
-              </svg>
+            WHAT'S NEXT.
+          </span>
+        </h1>
 
-              {/* Green bottom fog */}
-              <div
-                className="absolute bottom-0 left-0 right-0 h-1/3"
-                style={{ background: 'linear-gradient(to top, rgba(0,255,136,0.12), transparent)' }}
-              />
-              {/* Left fade */}
-              <div
-                className="absolute top-0 left-0 bottom-0 w-1/4"
-                style={{ background: 'linear-gradient(to right, #080c0a, transparent)' }}
-              />
-            </div>
+        {/* ── Concise Supporting Statement ── */}
+        <p
+          className={`font-sans text-sm sm:text-base md:text-lg text-white/60 font-light mt-6 max-w-xl leading-relaxed transition-all duration-700 ${
+            mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+          }`}
+          style={{ transitionDelay: '500ms' }}
+        >
+          A laboratory for technology, ideas, experiments and creators. Where precision meets relentless innovation.
+        </p>
 
-            {/* Typing text overlay */}
-            <div className="absolute top-8 right-8 text-right">
-              <TypingText />
-            </div>
+        {/* ── Primary & Secondary CTAs ── */}
+        <div
+          className={`flex flex-wrap items-center justify-center gap-4 mt-10 transition-all duration-700 ${
+            mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+          }`}
+          style={{ transitionDelay: '650ms' }}
+        >
+          {/* Primary CTA */}
+          <button
+            id="hero-explore-projects-btn"
+            onClick={scrollToProjects}
+            className="group relative inline-flex items-center gap-3 px-7 py-3.5 rounded-xl font-mono-custom text-xs tracking-widest uppercase text-dark bg-eg hover:bg-eg-200 transition-all duration-300 shadow-lg shadow-eg/20 hover:shadow-eg/40 hover:scale-[1.02] active:scale-[0.98] font-bold"
+          >
+            <span>EXPLORE PROJECTS</span>
+            <ArrowRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-1" />
+          </button>
 
-            {/* Corner decorations */}
-            <div className="absolute top-4 right-4 w-6 h-6 border-t border-r border-eg/40" />
-            <div className="absolute bottom-4 left-4 w-6 h-6 border-b border-l border-eg/40" />
+          {/* Secondary Action */}
+          <button
+            id="hero-enter-lab-btn"
+            onClick={scrollToLab}
+            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl font-mono-custom text-xs tracking-widest uppercase text-white/70 hover:text-white border border-white/10 hover:border-eg/40 bg-dark-200/50 hover:bg-eg/5 transition-all duration-300 backdrop-blur-md"
+          >
+            <span>THE LAB</span>
+            <span className="text-eg/60">↓</span>
+          </button>
+        </div>
+
+        {/* ── Technical Micro Data Bar ── */}
+        <div
+          className={`mt-16 sm:mt-20 flex items-center justify-center gap-6 sm:gap-10 text-white/30 font-mono-custom text-[10px] tracking-widest uppercase transition-all duration-1000 ${
+            mounted ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{ transitionDelay: '800ms' }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-eg/60" />
+            <span>EST. 2024</span>
+          </div>
+          <div className="h-3 w-px bg-white/10" />
+          <div className="flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-eg/60" />
+            <span>OPEN ARCHITECTURE</span>
+          </div>
+          <div className="h-3 w-px bg-white/10 hidden sm:block" />
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-eg/60" />
+            <span>EXPERIMENT · BUILD</span>
           </div>
         </div>
       </div>
 
-      {/* Scroll indicator */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-40">
-        <span className="font-mono-custom text-[9px] tracking-widest text-white uppercase">Scroll</span>
-        <div className="w-px h-8 bg-gradient-to-b from-white/40 to-transparent" />
+      {/* ── Scroll Indicator ── */}
+      <div
+        onClick={scrollToProjects}
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 opacity-40 hover:opacity-100 transition-opacity cursor-pointer z-10"
+      >
+        <span className="font-mono-custom text-[9px] tracking-widest text-white uppercase">SCROLL</span>
+        <div className="w-px h-6 bg-gradient-to-b from-eg/60 to-transparent animate-pulse" />
       </div>
     </section>
   );

@@ -35,9 +35,16 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
   const [error, setError] = useState<string | null>(null);
   const [selectedApp, setSelectedApp] = useState<CreatorApplication | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   const fetchApplications = useCallback(async () => {
     setLoading(true);
@@ -59,19 +66,21 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
 
   useEffect(() => { fetchApplications(); }, [fetchApplications]);
 
-  const handleApprove = async (app: CreatorApplication) => {
-    if (!confirm(`Approve ${app.full_name} as Creator?`)) return;
+  const handleApprove = async () => {
+    if (!selectedApp) return;
     setProcessing(true);
     try {
       const { error } = await supabase.rpc('review_creator_application', {
-        p_application_id: app.id,
+        p_application_id: selectedApp.id,
         p_action: 'approve',
       });
       if (error) throw error;
-      await fetchApplications();
+      setShowApproveModal(false);
       setSelectedApp(null);
+      await fetchApplications();
+      showToast('Application approved successfully.');
     } catch (err: unknown) {
-      alert((err as Error)?.message ?? 'Failed to approve application');
+      showToast((err as Error)?.message ?? 'Failed to approve application', 'error');
     } finally {
       setProcessing(false);
     }
@@ -91,8 +100,9 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
       setRejectReason('');
       setSelectedApp(null);
       await fetchApplications();
+      showToast('Application rejected.', 'error');
     } catch (err: unknown) {
-      alert((err as Error)?.message ?? 'Failed to reject application');
+      showToast((err as Error)?.message ?? 'Failed to reject application', 'error');
     } finally {
       setProcessing(false);
     }
@@ -119,6 +129,17 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
           ))}
         </div>
       </div>
+
+      {toastMsg && (
+        <div className={`p-4 rounded-xl border font-mono-custom text-xs flex items-center justify-between gap-3 animate-fade-in ${
+          toastMsg.type === 'success'
+            ? 'border-eg/40 bg-eg/10 text-eg'
+            : 'border-red-500/40 bg-red-500/10 text-red-300'
+        }`}>
+          <span>{toastMsg.type === 'success' ? '✓ ' : '✕ '}{toastMsg.text}</span>
+          <button onClick={() => setToastMsg(null)} className="text-white/40 hover:text-white text-xs">✕</button>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 rounded-xl border border-red-500/40 bg-red-500/10 text-xs text-red-300 font-mono-custom">{error}</div>
@@ -169,7 +190,7 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
                         <button onClick={() => setSelectedApp(app)} className="px-2 py-1 rounded border border-white/20 text-white/60 text-[10px] font-mono-custom hover:text-white">VIEW</button>
                         {app.status === 'pending' && (
                           <>
-                            <button onClick={() => handleApprove(app)} disabled={processing} className="px-2 py-1 rounded border border-eg/30 text-eg text-[10px] font-mono-custom hover:bg-eg/10">APPROVE</button>
+                            <button onClick={() => { setSelectedApp(app); setShowApproveModal(true); }} disabled={processing} className="px-2 py-1 rounded border border-eg/30 text-eg text-[10px] font-mono-custom hover:bg-eg/10">APPROVE</button>
                             <button onClick={() => { setSelectedApp(app); setShowRejectModal(true); }} disabled={processing} className="px-2 py-1 rounded border border-red-500/30 text-red-400 text-[10px] font-mono-custom hover:bg-red-500/10">REJECT</button>
                           </>
                         )}
@@ -184,7 +205,7 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
       </div>
 
       {/* View Modal — Structured Section View */}
-      {selectedApp && !showRejectModal && (
+      {selectedApp && !showRejectModal && !showApproveModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
           <div className="glass rounded-2xl border border-eg/30 p-6 md:p-8 max-w-2xl w-full max-h-[85vh] overflow-y-auto space-y-6">
             <div className="flex justify-between items-start border-b border-eg/10 pb-3">
@@ -266,10 +287,31 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
 
             {selectedApp.status === 'pending' && (
               <div className="flex gap-3 pt-2 border-t border-eg/10">
-                <button onClick={() => handleApprove(selectedApp)} disabled={processing} className="btn-primary py-2.5 px-4 text-xs flex-1 font-mono-custom">APPROVE APPLICATION</button>
+                <button onClick={() => setShowApproveModal(true)} disabled={processing} className="btn-primary py-2.5 px-4 text-xs flex-1 font-mono-custom">APPROVE APPLICATION</button>
                 <button onClick={() => setShowRejectModal(true)} disabled={processing} className="flex-1 py-2.5 px-4 text-xs font-mono-custom rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10">REJECT</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Approve Confirmation Modal */}
+      {showApproveModal && selectedApp && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="glass rounded-2xl border border-eg/40 p-6 max-w-md w-full space-y-4">
+            <h3 className="font-display text-sm font-bold text-white">Approve Creator Application</h3>
+            <p className="font-sans text-xs text-white/70">
+              Are you sure you want to approve <strong className="text-white">{selectedApp.full_name}</strong> as an official ISOMER Creator? They will receive full creator publishing access.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowApproveModal(false)} disabled={processing} className="px-4 py-2 rounded-xl border border-white/15 text-xs text-white/60 font-mono-custom hover:text-white">
+                CANCEL
+              </button>
+              <button onClick={handleApprove} disabled={processing} className="btn-primary px-4 py-2 text-xs font-mono-custom flex items-center gap-2">
+                {processing && <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />}
+                {processing ? 'APPROVING...' : 'CONFIRM APPROVAL'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -279,11 +321,15 @@ const CreatorApplicationsPanel: React.FC<CreatorApplicationsPanelProps> = () => 
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <div className="glass rounded-2xl border border-red-500/30 p-6 max-w-md w-full space-y-4">
             <h3 className="font-display text-sm font-bold text-white">Reject Application</h3>
-            <p className="font-sans text-xs text-white/60">Rejecting {selectedApp.full_name}. Optional reason:</p>
-            <textarea rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Optional rejection reason..." className="w-full bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-2.5 text-xs text-white font-sans" />
-            <div className="flex justify-end gap-3">
-              <button onClick={() => { setShowRejectModal(false); setRejectReason(''); }} className="text-xs text-white/50">CANCEL</button>
-              <button onClick={handleReject} disabled={processing} className="px-4 py-2 rounded border border-red-500/50 text-red-300 text-xs font-mono-custom">{processing ? 'REJECTING...' : 'CONFIRM REJECT'}</button>
+            <p className="font-sans text-xs text-white/60">Rejecting application for {selectedApp.full_name}. Optional reason for feedback:</p>
+            <textarea rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Optional rejection reason..." className="w-full bg-dark-200/80 border border-eg/20 rounded-xl px-4 py-2.5 text-xs text-white font-sans focus:outline-none focus:border-red-400" />
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => { setShowRejectModal(false); setRejectReason(''); }} disabled={processing} className="px-4 py-2 rounded-xl border border-white/15 text-xs text-white/60 font-mono-custom hover:text-white">
+                CANCEL
+              </button>
+              <button onClick={handleReject} disabled={processing} className="px-4 py-2 rounded-xl border border-red-500/50 bg-red-500/20 text-red-300 text-xs font-mono-custom hover:bg-red-500/30">
+                {processing ? 'REJECTING...' : 'CONFIRM REJECT'}
+              </button>
             </div>
           </div>
         </div>

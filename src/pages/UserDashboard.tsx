@@ -1,130 +1,129 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { useCreatorApplication } from '../lib/hooks';
-import { IsomerLogo, ArrowRight } from '../components/ui';
-import ProfileNotifications from '../components/ProfileNotifications';
+import { useUserProfile, useCreatorApplication } from '../lib/hooks';
+import { useUserDashboardData } from '../lib/userDashboardHooks';
+import { ArrowRight } from '../components/ui';
+import { UserWorkspaceHeader } from '../components/ui/UserWorkspaceHeader';
+import { ProjectMiniCard, formatRelativeTime } from '../components/ui/ProjectMiniCard';
+import { DashboardSkeleton } from '../components/ui/Skeleton';
 import { logAuthEvent } from '../lib/activityLog';
-import type { SocialLinks, UserProfile } from '../lib/types';
+import type { CreatorApplicationStatus } from '../lib/types';
 import {
   isAdminRole,
-  isOwner,
   formatRoleLabel,
-  getRoleBadgeClasses,
   resolveUserRole,
 } from '../lib/roles';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isValidUUID = (v?: string | null): v is string => !!v && UUID_REGEX.test(v);
 
-const SOCIAL_ICONS: Record<string, React.ReactNode> = {
-  github: (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-    </svg>
-  ),
-  twitter: (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-    </svg>
-  ),
-  linkedin: (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-    </svg>
-  ),
-  website: (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <circle cx="12" cy="12" r="10" />
-      <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" strokeLinecap="round" />
-    </svg>
-  ),
-};
+function getInitials(name: string | null | undefined, email: string | null | undefined) {
+  if (name?.trim()) {
+    const parts = name.trim().split(' ');
+    return parts.length >= 2
+      ? (parts[0][0] + parts[1][0]).toUpperCase()
+      : name.substring(0, 2).toUpperCase();
+  }
+  if (email?.trim()) return email.substring(0, 2).toUpperCase();
+  return 'U';
+}
+
+function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+  return (
+    <div className="glass-dark rounded-xl p-4 border border-eg/10 hover:border-eg/25 transition-colors">
+      <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">{label}</p>
+      <p className="font-display text-xl font-bold text-white tabular-nums">{value}</p>
+      {sub && <p className="font-mono-custom text-[10px] text-white/30 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+function CreatorStatusBanner({
+  status,
+  rejectionReason,
+}: {
+  status: CreatorApplicationStatus | 'none';
+  rejectionReason?: string | null;
+}) {
+  if (status === 'none') {
+    return (
+      <div className="glass rounded-2xl p-5 sm:p-6 border border-purple-500/25 bg-purple-500/5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="font-mono-custom text-[10px] tracking-widest text-purple-400 uppercase mb-1">Become a Creator</p>
+            <h2 className="font-display text-lg font-bold text-white">Share your work with the ISOMER community</h2>
+            <p className="font-sans text-xs text-white/50 mt-1 max-w-md">
+              Apply to publish projects, join the creator leaderboard, and inspire what comes next.
+            </p>
+          </div>
+          <Link
+            to="/apply-creator"
+            className="btn-outline py-2.5 px-5 text-xs flex items-center gap-2 border-purple-500/40 text-purple-300 hover:bg-purple-500/10 flex-shrink-0 self-start sm:self-center"
+          >
+            START APPLICATION <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'pending') {
+    return (
+      <div className="glass rounded-2xl p-5 sm:p-6 border border-amber-500/30 bg-amber-500/5">
+        <p className="font-mono-custom text-[10px] tracking-widest text-amber-400 uppercase mb-1">Application Under Review</p>
+        <h2 className="font-display text-lg font-bold text-white">Your creator application has been received</h2>
+        <p className="font-sans text-xs text-white/50 mt-1">
+          We&apos;ll notify you once your application has been reviewed. This usually takes a few days.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === 'approved') {
+    return (
+      <div className="glass rounded-2xl p-5 sm:p-6 border border-eg/30 bg-eg/5">
+        <p className="font-mono-custom text-[10px] tracking-widest text-eg uppercase mb-1">You&apos;re In</p>
+        <h2 className="font-display text-lg font-bold text-white">Your creator account is ready</h2>
+        <p className="font-sans text-xs text-white/50 mt-1 mb-4">
+          Head to your creator dashboard to publish your first project.
+        </p>
+        <Link to="/creator" className="btn-primary py-2 px-5 text-xs inline-flex items-center gap-2">
+          OPEN CREATOR DASHBOARD <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass rounded-2xl p-5 sm:p-6 border border-red-500/25 bg-red-500/5">
+      <p className="font-mono-custom text-[10px] tracking-widest text-red-400 uppercase mb-1">Application Not Approved</p>
+      <h2 className="font-display text-lg font-bold text-white">Your previous application was not approved</h2>
+      {rejectionReason && (
+        <p className="font-sans text-xs text-white/55 mt-2 leading-relaxed border-l-2 border-red-500/40 pl-3">
+          {rejectionReason}
+        </p>
+      )}
+      <Link
+        to="/apply-creator"
+        className="mt-4 btn-outline py-2 px-5 text-xs inline-flex items-center gap-2"
+      >
+        SUBMIT NEW APPLICATION <ArrowRight className="w-3.5 h-3.5" />
+      </Link>
+    </div>
+  );
+}
 
 const UserDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { profile, loading: profileLoading, error: profileError } = useUserProfile();
   const { application, loading: appLoading } = useCreatorApplication();
+  const { stats, likedProjects, recentComments, activity, loading: dashLoading, error: dashError, refresh } =
+    useUserDashboardData();
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [profileError, setProfileError] = useState<string | null>(null);
-
-  const fetchProfile = useCallback(async () => {
-    setProfileLoading(true);
-    setProfileError(null);
-
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-
-    if (userErr || !userData?.user) {
-      if (userErr) {
-        console.error('[UserDashboard] getUser() failed:', userErr);
-      }
-      setProfile(null);
-      setProfileLoading(false);
-      return;
-    }
-
-    const user = userData.user;
-
-    const { data, error: fetchErr } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, avatar_url, role, bio, about, date_of_birth, social_links, creator_approved_at, first_project_uploaded_at, creator_requirement_status, created_at, updated_at')
-      .eq('id', user.id)
-      .single();
-
-    if (fetchErr) {
-      console.error('[UserDashboard] profiles SELECT failed:', {
-        userId: user.id,
-        code: fetchErr.code,
-        message: fetchErr.message,
-      });
-      setProfileError(fetchErr.message || 'Failed to load profile');
-      setProfile(null);
-      setProfileLoading(false);
-      return;
-    }
-
-    if (!data) {
-      console.warn('[UserDashboard] No profile row found for userId:', user.id);
-      setProfileError('Profile not found');
-      setProfile(null);
-      setProfileLoading(false);
-      return;
-    }
-
-    const row = data as UserProfile;
-    row.role = resolveUserRole(row.id, row.role);
-    if (row.social_links && typeof row.social_links !== 'object') {
-      try {
-        row.social_links = JSON.parse(row.social_links as unknown as string) as SocialLinks;
-      } catch {
-        row.social_links = {};
-      }
-    }
-
-    setProfile(row);
-    setProfileLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchProfile();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session?.user) {
-        setProfile(null);
-        setProfileLoading(false);
-      } else {
-        fetchProfile();
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [fetchProfile]);
-
+  const loading = profileLoading || appLoading || dashLoading;
   const effectiveRole = resolveUserRole(profile?.id, profile?.role);
-  const isUserOwner = isOwner(profile);
   const isUserAdmin = isAdminRole(effectiveRole, profile?.id);
   const isUserCreator = profile?.role === 'creator';
   const isNormalUser = profile?.role === 'user';
@@ -135,299 +134,261 @@ const UserDashboard: React.FC = () => {
     navigate('/login', { replace: true });
   };
 
-  const getInitials = (name: string | null | undefined, email: string | null | undefined) => {
-    if (name && name.trim()) {
-      const parts = name.trim().split(' ');
-      if (parts.length >= 2) {
-        return (parts[0][0] + parts[1][0]).toUpperCase();
-      }
-      return name.substring(0, 2).toUpperCase();
-    }
-    if (email && email.trim()) {
-      return email.substring(0, 2).toUpperCase();
-    }
-    return 'US';
-  };
+  const creatorStatus: CreatorApplicationStatus | 'none' = isUserCreator
+    ? 'approved'
+    : application?.status ?? 'none';
 
-  const formatDate = (dateStr?: string | null) => {
-    if (!dateStr) return 'N/A';
-    try {
-      return new Date(dateStr).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
+  const welcomeName = profile?.full_name?.split(' ')[0] || 'there';
 
-  const socialLinks = (profile?.social_links || {}) as SocialLinks;
-  const socialEntries = Object.entries(socialLinks).filter(([, v]) => v);
-
-  if (profileLoading || appLoading) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-dark bg-circuit flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 rounded-full border-2 border-eg/30 border-t-eg animate-spin" />
-          <span className="font-mono-custom text-xs tracking-widest text-eg/70 uppercase">
-            LOADING PROFILE...
-          </span>
-        </div>
+      <div className="min-h-screen bg-dark bg-circuit text-white flex flex-col">
+        <UserWorkspaceHeader badge="MY WORKSPACE" />
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+          <DashboardSkeleton />
+        </main>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-dark bg-circuit text-white flex flex-col selection:bg-eg/30">
-      {/* Header / Navbar */}
-      <header className="glass-dark border-b border-eg/10 sticky top-0 z-30 py-4 px-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <Link to="/">
-              <IsomerLogo size="md" />
-            </Link>
-            <div className="h-5 w-px bg-eg/20 hidden sm:block" />
-            <span className="font-mono-custom text-[10px] tracking-widest text-eg/80 uppercase bg-eg/10 px-2.5 py-1 rounded border border-eg/30 hidden sm:inline-block">
-              {isUserOwner ? 'OWNER DASHBOARD' : isUserAdmin ? 'ADMIN DASHBOARD' : 'USER DASHBOARD'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="font-mono-custom text-xs text-white/60 hover:text-eg transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10"
-            >
-              Public Site ↗
-            </Link>
-
+      <UserWorkspaceHeader
+        badge="MY WORKSPACE"
+        backTo={{ label: '← Site', path: '/' }}
+        actions={
+          <>
             {isUserAdmin && (
               <Link
                 to="/admin"
-                className="font-mono-custom text-xs text-eg hover:bg-eg/10 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-eg/40 bg-eg/5"
+                className="font-mono-custom text-xs text-eg hover:bg-eg/10 transition-colors px-2.5 py-1.5 rounded-lg border border-eg/30 hidden sm:inline-flex"
               >
-                Admin Console ↗
+                Admin
               </Link>
             )}
-
             {isUserCreator && (
               <Link
                 to="/creator"
-                className="font-mono-custom text-xs text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-purple-500/40 bg-purple-500/5"
+                className="font-mono-custom text-xs text-purple-400 hover:bg-purple-500/10 transition-colors px-2.5 py-1.5 rounded-lg border border-purple-500/30 hidden sm:inline-flex"
               >
-                Creator Dashboard ↗
+                Creator
               </Link>
             )}
-
             <button
-              id="user-logout-btn"
+              type="button"
               onClick={handleLogout}
-              className="btn-primary py-1.5 px-4 text-xs font-mono-custom flex items-center gap-1.5"
+              className="font-mono-custom text-xs text-white/50 hover:text-red-400 transition-colors px-2.5 py-1.5 rounded-lg border border-white/10"
             >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              LOGOUT
+              Logout
             </button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-12 space-y-8">
-        {profileError && (
-          <div className="p-4 rounded-xl border border-red-500/40 bg-red-500/10 flex items-center gap-3">
-            <span className="font-mono-custom text-xs text-red-400">Error loading profile: {profileError}</span>
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {(profileError || dashError) && (
+          <div className="p-4 rounded-xl border border-red-500/40 bg-red-500/10 flex items-center justify-between gap-4">
+            <p className="font-mono-custom text-xs text-red-300">
+              {profileError || dashError}
+            </p>
+            <button type="button" onClick={() => refresh()} className="btn-outline py-1.5 px-3 text-[10px] flex-shrink-0">
+              Retry
+            </button>
           </div>
         )}
 
-        {/* Profile Card */}
-        <div className="glass rounded-2xl p-8 border border-eg/20 shadow-2xl relative overflow-hidden">
-          {/* Futuristic Corner Accents */}
-          <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-eg/60" />
-          <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-eg/60" />
-          <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-eg/60" />
-          <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-eg/60" />
-          <div className="absolute top-0 right-0 w-60 h-60 bg-eg/5 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
-            {/* Profile Avatar */}
-            <div className="relative flex-shrink-0">
-              {profile?.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.full_name || 'User Avatar'}
-                  className="w-24 h-24 rounded-2xl object-cover border-2 border-eg/40 shadow-eg-sm"
-                />
-              ) : (
-                <div className="w-24 h-24 rounded-2xl bg-dark-300 border-2 border-eg/40 flex items-center justify-center shadow-eg-sm">
-                  <span className="font-display text-2xl font-bold text-eg tracking-wider">
-                    {getInitials(profile?.full_name, profile?.email)}
-                  </span>
-                </div>
-              )}
-              <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-full bg-eg flex items-center justify-center text-dark font-bold text-[10px] shadow-sm">
-                ✓
+        {/* Header strip */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+          <div className="relative flex-shrink-0">
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt=""
+                className="w-16 h-16 rounded-xl object-cover border-2 border-eg/30"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-xl bg-dark-300 border-2 border-eg/30 flex items-center justify-center">
+                <span className="font-display text-xl font-bold text-eg">
+                  {getInitials(profile?.full_name, profile?.email)}
+                </span>
               </div>
-            </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-mono-custom text-[10px] tracking-widest text-eg/70 uppercase">
+              Welcome back
+            </p>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wide text-white truncate">
+              {profile?.full_name || 'Member'}
+            </h1>
+            <p className="font-sans text-sm text-white/45 mt-0.5">
+              Hi {welcomeName} — your personal ISOMER workspace
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
+            <Link to="/profile/edit" className="btn-primary py-2 px-4 text-xs">
+              Edit Profile
+            </Link>
+            {isValidUUID(profile?.id) && (
+              <Link to={`/profile/${profile!.id}`} className="btn-outline py-2 px-4 text-xs">
+                Public Profile
+              </Link>
+            )}
+          </div>
+        </div>
 
-            {/* Profile Info */}
-            <div className="flex-1 text-center md:text-left space-y-4">
-              <div>
-                <div className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full border mb-2 font-mono-custom text-[10px] tracking-widest uppercase ${getRoleBadgeClasses(effectiveRole, profile?.id)}`}>
-                  <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
-                  <span>
-                    ROLE: {formatRoleLabel(effectiveRole, profile?.id)}
+        {/* Overview stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard label="Projects Liked" value={stats.likesCount} />
+          <StatCard label="Comments" value={stats.commentsCount} />
+          <StatCard
+            label="Role"
+            value={formatRoleLabel(effectiveRole, profile?.id).split(' ')[0]}
+            sub={formatRoleLabel(effectiveRole, profile?.id)}
+          />
+          <StatCard
+            label="Member Since"
+            value={
+              profile?.created_at
+                ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                : '—'
+            }
+          />
+        </div>
+
+        {/* Creator status — only for non-creator/non-admin users */}
+        {isNormalUser && (
+          <CreatorStatusBanner
+            status={creatorStatus}
+            rejectionReason={application?.status === 'rejected' ? application.rejection_reason : null}
+          />
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Activity feed */}
+          <section className="lg:col-span-1 glass rounded-2xl p-5 border border-eg/15 space-y-4">
+            <h2 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-eg" />
+              Recent Activity
+            </h2>
+            {activity.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="font-mono-custom text-[10px] tracking-widest text-white/30 uppercase">Nothing here yet</p>
+                <p className="font-sans text-xs text-white/40 mt-1">Like or comment on projects to see activity.</p>
+                <Link to="/#projects" className="inline-block mt-3 text-eg font-mono-custom text-xs hover:underline">
+                  Browse projects →
+                </Link>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {activity.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      to={`/projects/${item.projectSlug}`}
+                      className="block p-3 rounded-xl border border-white/5 bg-dark-200/40 hover:border-eg/25 hover:bg-dark-200/70 transition-all group"
+                    >
+                      <p className="font-mono-custom text-[10px] text-eg/80 uppercase tracking-wider">
+                        {item.type === 'like' ? 'Liked' : 'Commented on'}
+                      </p>
+                      <p className="font-display text-xs font-semibold text-white group-hover:text-eg transition-colors truncate mt-0.5">
+                        {item.projectTitle}
+                      </p>
+                      {item.preview && (
+                        <p className="font-sans text-[11px] text-white/45 mt-1 line-clamp-2 italic">
+                          &ldquo;{item.preview}&rdquo;
+                        </p>
+                      )}
+                      <p className="font-mono-custom text-[10px] text-white/30 mt-1.5">
+                        {formatRelativeTime(item.createdAt)}
+                      </p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Liked projects + comments */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Liked projects */}
+            <section className="glass rounded-2xl p-5 border border-eg/15 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-eg" />
+                  Liked Projects
+                </h2>
+                {stats.likesCount > 6 && (
+                  <span className="font-mono-custom text-[10px] text-white/30">
+                    Showing 6 of {stats.likesCount}
                   </span>
-                </div>
-                <h1 className="font-display text-2xl md:text-3xl font-bold tracking-wide text-white">
-                  {profile?.full_name || 'Member Profile'}
-                </h1>
-                <p className="font-mono-custom text-sm text-white/50 mt-1">
-                  {profile?.email}
-                </p>
-                {profile?.bio && (
-                  <p className="font-sans text-sm text-white/60 mt-2 leading-relaxed">
-                    {profile.bio}
-                  </p>
                 )}
               </div>
-
-              {/* Social Links (if set) */}
-              {socialEntries.length > 0 && (
-                <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                  {socialEntries.map(([platform, url]) => (
-                    <a
-                      key={platform}
-                      href={url as string}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-eg/20 bg-dark-200/60 text-white/50 hover:text-eg hover:border-eg/50 transition-all duration-200 font-mono-custom text-[10px] tracking-wider uppercase"
-                    >
-                      {SOCIAL_ICONS[platform] || SOCIAL_ICONS.website}
-                      {platform}
-                    </a>
+              {likedProjects.length === 0 ? (
+                <div className="py-10 text-center rounded-xl border border-dashed border-white/10">
+                  <p className="font-mono-custom text-[10px] tracking-widest text-white/30 uppercase">Nothing here yet</p>
+                  <p className="font-sans text-xs text-white/40 mt-1">Your liked projects will appear here.</p>
+                  <Link to="/#projects" className="inline-block mt-3 btn-outline py-2 px-4 text-xs">
+                    Discover Projects
+                  </Link>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {likedProjects.map((p, i) => (
+                    <ProjectMiniCard key={p.id} project={p} index={i} />
                   ))}
                 </div>
               )}
+            </section>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap gap-3 justify-center md:justify-start pt-1">
-                <Link
-                  to="/profile/edit"
-                  id="edit-profile-btn"
-                  className="btn-primary py-2 px-5 text-xs flex items-center gap-2"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  EDIT PROFILE
-                </Link>
-                {isValidUUID(profile?.id) && (
-                  <Link
-                    to={`/profile/${profile.id}`}
-                    id="view-public-profile-btn"
-                    className="btn-outline py-2 px-5 text-xs flex items-center gap-2"
-                  >
-                    VIEW PUBLIC PROFILE
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                )}
-
-                {/* Admin console button for Owner and Admins */}
-                {isUserAdmin && (
-                  <Link
-                    to="/admin"
-                    id="dashboard-admin-btn"
-                    className="btn-primary py-2 px-5 text-xs flex items-center gap-2 bg-eg/20 text-eg border border-eg hover:bg-eg/30"
-                  >
-                    ADMIN CONSOLE ↗
-                  </Link>
-                )}
-
-                {/* Creator dashboard button for creators */}
-                {isUserCreator && (
-                  <Link
-                    to="/creator"
-                    id="dashboard-creator-btn"
-                    className="btn-outline py-2 px-5 text-xs flex items-center gap-2 border-purple-500/40 text-purple-400 hover:bg-purple-500/10"
-                  >
-                    CREATOR DASHBOARD ↗
-                  </Link>
-                )}
-
-                {/* Creator application / dashboard actions (for normal users ONLY) */}
-                {isNormalUser && (
-                  application?.status === 'pending' ? (
-                    <span className="btn-outline py-2 px-5 text-xs flex items-center gap-2 opacity-60 cursor-default border-amber-500/30 text-amber-400">
-                      APPLICATION PENDING
-                    </span>
-                  ) : (
-                    <Link
-                      to="/apply-creator"
-                      className="btn-outline py-2 px-5 text-xs flex items-center gap-2 border-purple-500/40 text-purple-400 hover:bg-purple-500/10"
-                    >
-                      BECOME A CREATOR
-                    </Link>
-                  )
-                )}
-              </div>
-            </div>
+            {/* Recent comments */}
+            {stats.commentsCount > 0 && (
+              <section className="glass rounded-2xl p-5 border border-eg/15 space-y-4">
+                <h2 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-eg" />
+                  Your Comments
+                </h2>
+                <ul className="space-y-3">
+                  {recentComments.map((c) => (
+                    <li key={c.id}>
+                      {c.project_slug ? (
+                        <Link
+                          to={`/projects/${c.project_slug}#comments-section`}
+                          className="block p-4 rounded-xl border border-white/5 bg-dark-200/40 hover:border-eg/25 transition-all group"
+                        >
+                          <p className="font-mono-custom text-[10px] text-white/40 uppercase tracking-wider">
+                            on {c.project_title || 'Project'}
+                          </p>
+                          <p className="font-sans text-sm text-white/75 mt-1 line-clamp-2 group-hover:text-white transition-colors">
+                            &ldquo;{c.content}&rdquo;
+                          </p>
+                          <p className="font-mono-custom text-[10px] text-white/30 mt-2">
+                            {formatRelativeTime(c.created_at)}
+                          </p>
+                        </Link>
+                      ) : (
+                        <div className="p-4 rounded-xl border border-white/5 bg-dark-200/40">
+                          <p className="font-sans text-sm text-white/75 line-clamp-2">&ldquo;{c.content}&rdquo;</p>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </div>
         </div>
 
-        {/* About Section (if set) */}
-        {profile?.about && (
-          <div className="glass rounded-2xl p-6 border border-eg/15 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-eg/5 rounded-full blur-3xl pointer-events-none" />
-            <h2 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2 mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-eg" />
-              ABOUT
-            </h2>
-            <p className="font-sans text-sm text-white/70 leading-relaxed whitespace-pre-line relative z-10">
-              {profile.about}
-            </p>
-          </div>
-        )}
-
-        {/* Notifications Section */}
-        <ProfileNotifications userRole={effectiveRole} />
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-dark-200/60 p-4 rounded-xl border border-white/5">
-            <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">
-              ACCOUNT CREATED
-            </p>
-            <p className="font-mono-custom text-sm text-white font-medium">
-              {formatDate(profile?.created_at)}
-            </p>
-          </div>
-
-          <div className="bg-dark-200/60 p-4 rounded-xl border border-white/5">
-            <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">
-              SYSTEM STATUS
-            </p>
-            <p className="font-mono-custom text-sm text-eg font-medium flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
-              AUTHENTICATED ({formatRoleLabel(effectiveRole, profile?.id)})
-            </p>
-          </div>
-
-          <div className="bg-dark-200/60 p-4 rounded-xl border border-white/5">
-            <p className="font-mono-custom text-[10px] tracking-widest text-white/40 uppercase mb-1">
-              PUBLIC PROFILE
-            </p>
-            {isValidUUID(profile?.id) ? (
-              <Link
-                to={`/profile/${profile.id}`}
-                className="font-mono-custom text-sm text-eg/80 hover:text-eg transition-colors font-medium flex items-center gap-1.5"
-              >
-                VIEW PROFILE ↗
-              </Link>
-            ) : (
-              <span className="font-mono-custom text-sm text-white/20">Loading…</span>
-            )}
-          </div>
+        {/* Quick links */}
+        <div className="flex flex-wrap gap-3 pt-2 border-t border-eg/10">
+          <Link to="/notifications" className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors px-3 py-2 rounded-lg border border-white/10 hover:border-eg/30">
+            Notifications →
+          </Link>
+          <Link to="/leaderboard" className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors px-3 py-2 rounded-lg border border-white/10 hover:border-eg/30">
+            Leaderboard →
+          </Link>
+          <Link to="/#projects" className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors px-3 py-2 rounded-lg border border-white/10 hover:border-eg/30">
+            Browse Projects →
+          </Link>
         </div>
       </main>
     </div>

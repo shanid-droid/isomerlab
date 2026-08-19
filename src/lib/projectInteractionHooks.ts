@@ -326,7 +326,6 @@ export function useProjectComments(projectId: string) {
   };
 
   const softDeleteComment = async (commentId: string) => {
-    if (!confirm('Are you sure you want to delete this comment?')) return;
     try {
       const { error } = await supabase.rpc('soft_delete_project_comment', {
         p_comment_id: commentId,

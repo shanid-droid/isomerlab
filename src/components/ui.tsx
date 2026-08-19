@@ -77,18 +77,21 @@ export const Navbar: React.FC = () => {
   }, []);
 
   const links = [
-    { id: 'home',     label: 'Home'     },
-    { id: 'about',    label: 'About'    },
-    { id: 'projects', label: 'Projects' },
-    { id: 'contact',  label: 'Contact'  },
+    { id: 'featured-project', label: 'Projects'  },
+    { id: 'the-lab',          label: 'The Lab'   },
+    { id: 'creators',         label: 'Creators'  },
+    { id: 'projects',         label: 'Catalogue' },
   ];
 
   const scrollTo = (id: string) => {
     setActive(id);
     setMenuOpen(false);
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-    else window.location.href = `/#${id}`;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.location.href = `/#${id}`;
+    }
   };
 
   return (
@@ -99,7 +102,7 @@ export const Navbar: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
-        <Link to="/admin/login" className="focus:outline-none">
+        <Link to="/" className="focus:outline-none">
           <IsomerLogo size="md" />
         </Link>
 
@@ -131,7 +134,7 @@ export const Navbar: React.FC = () => {
 
           <Link
             to={hasSession ? "/dashboard" : "/login"}
-            className="font-mono-custom text-xs text-white/70 hover:text-eg transition-colors px-3 py-1.5 rounded border border-white/10"
+            className="font-mono-custom text-xs text-white/70 hover:text-eg transition-colors px-3.5 py-1.5 rounded-xl border border-white/15 bg-dark-200/50 hover:border-eg/40"
           >
             {hasSession ? "Dashboard" : "Sign In"}
           </Link>

@@ -26,7 +26,6 @@ export const LeaderboardControlPanel: React.FC = () => {
 
   // Local Form State
   const [formData, setFormData] = useState<LeaderboardSettings | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Snapshot generation dialog
   const [confirmModal, setConfirmModal] = useState<{
@@ -47,6 +46,12 @@ export const LeaderboardControlPanel: React.FC = () => {
   const [overrideScore, setOverrideScore] = useState<number>(100);
   const [overrideRank, setOverrideRank] = useState<number>(1);
   const [overrideNotes, setOverrideNotes] = useState('');
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   useEffect(() => {
     if (settings) {
@@ -64,11 +69,10 @@ export const LeaderboardControlPanel: React.FC = () => {
 
     try {
       await updateSettings(formData);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 4000);
+      showToast('Leaderboard settings saved successfully.');
       await refreshSettings();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(`Failed to save settings: ${err.message}`, 'error');
     }
   };
 
@@ -94,9 +98,9 @@ export const LeaderboardControlPanel: React.FC = () => {
       setOverrideEntryId('');
       setOverrideNotes('');
       await fetchSnapshotsHistory();
-      alert('Override successfully recorded.');
+      showToast('Override successfully recorded.');
     } catch (err: any) {
-      alert(`Override failed: ${err.message}`);
+      showToast(`Override failed: ${err.message}`, 'error');
     }
   };
 
@@ -111,6 +115,17 @@ export const LeaderboardControlPanel: React.FC = () => {
 
   return (
     <div className="space-y-10">
+      {toastMsg && (
+        <div className={`p-4 rounded-xl border font-mono-custom text-xs flex items-center justify-between gap-3 animate-fade-in ${
+          toastMsg.type === 'success'
+            ? 'border-eg/40 bg-eg/10 text-eg'
+            : 'border-red-500/40 bg-red-500/10 text-red-300'
+        }`}>
+          <span>{toastMsg.type === 'success' ? '✓ ' : '✕ '}{toastMsg.text}</span>
+          <button onClick={() => setToastMsg(null)} className="text-white/40 hover:text-white text-xs">✕</button>
+        </div>
+      )}
+
       {/* ── Header ────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-eg/15 pb-6">
         <div>
@@ -144,12 +159,6 @@ export const LeaderboardControlPanel: React.FC = () => {
           </button>
         </div>
       </div>
-
-      {saveSuccess && (
-        <div className="p-4 rounded-xl border border-eg/50 bg-eg/10 text-eg font-mono-custom text-xs flex items-center gap-2">
-          <span>✓</span> Leaderboard settings and scoring formulas successfully updated!
-        </div>
-      )}
 
       {updateError && (
         <div className="p-4 rounded-xl border border-red-500/50 bg-red-500/10 text-red-400 font-mono-custom text-xs">
@@ -597,7 +606,7 @@ export const LeaderboardControlPanel: React.FC = () => {
                     await confirmModal.onConfirm();
                     setConfirmModal({ ...confirmModal, open: false });
                   } catch (err: any) {
-                    alert(`Action failed: ${err.message}`);
+                    showToast(`Action failed: ${err.message}`, 'error');
                   }
                 }}
                 className="btn-primary px-5 py-2 text-xs font-mono-custom"

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from './supabase';
 import type { Project, ProjectGalleryItem, UserProfile, ProjectWithCreator, SocialLinks, CreatorApplication } from './types';
-import { resolveUserRole } from './roles';
+import { resolveUserRole, isCreatorRole } from './roles';
 
 interface UseProjectsResult {
   projects: ProjectWithCreator[];
@@ -383,6 +383,36 @@ export function usePublicProfile(userId: string | undefined): UsePublicProfileRe
 
       console.debug('[usePublicProfile] Querying profiles.id =', userId);
 
+      // 1. Try secure RPC that safely merges public profile + approved creator data
+      try {
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('get_public_creator_profile', {
+          p_user_id: userId,
+        });
+
+        if (!cancelled && !rpcErr && rpcData && typeof rpcData === 'object' && (rpcData as any).id) {
+          const row = rpcData as UserProfile;
+          row.role = resolveUserRole(row.id, row.role);
+          if (row.social_links && typeof row.social_links !== 'object') {
+            try {
+              row.social_links = JSON.parse(row.social_links as unknown as string) as SocialLinks;
+            } catch {
+              row.social_links = {};
+            }
+          }
+          console.debug('[usePublicProfile] Profile loaded via RPC ✓', {
+            id: row.id,
+            full_name: row.full_name,
+            profession: row.profession,
+          });
+          setProfile(row);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // RPC fallback
+      }
+
+      // 2. Direct profiles query fallback
       const { data, error: fetchErr } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url, bio, about, social_links, role, creator_approved_at, created_at')
@@ -392,23 +422,11 @@ export function usePublicProfile(userId: string | undefined): UsePublicProfileRe
       if (cancelled) return;
 
       if (fetchErr) {
-        // PGRST116 = "JSON object requested, multiple (or no) rows returned" from .single()
-        // This means the row genuinely doesn't exist, OR RLS blocked it.
         if (fetchErr.code === 'PGRST116') {
-          console.warn(
-            '[usePublicProfile] No profile row found for UUID:', userId,
-            '\n→ Either the profile does not exist in public.profiles,',
-            '\n   OR the "Public can read profiles" SELECT policy is missing/inactive.',
-            '\n→ Run this in Supabase SQL Editor to check:',
-            '\n   SELECT policyname, cmd FROM pg_policies WHERE tablename = \'profiles\';'
-          );
+          console.warn('[usePublicProfile] No profile row found for UUID:', userId);
           setProfile(null);
         } else {
-          console.error(
-            '[usePublicProfile] Supabase SELECT error for userId:', userId,
-            '\n→ Full error:',
-            { code: fetchErr.code, message: fetchErr.message, details: fetchErr.details, hint: fetchErr.hint }
-          );
+          console.error('[usePublicProfile] Supabase SELECT error for userId:', userId, fetchErr);
           setError(fetchErr.message);
         }
         setLoading(false);
@@ -429,8 +447,43 @@ export function usePublicProfile(userId: string | undefined): UsePublicProfileRe
         try {
           row.social_links = JSON.parse(row.social_links as unknown as string) as SocialLinks;
         } catch {
-          console.warn('[usePublicProfile] Failed to parse social_links JSON');
           row.social_links = {};
+        }
+      }
+
+      // 3. Fallback: If it's a creator, attempt to retrieve approved creator application details if accessible
+      if (isCreatorRole(row.role, row.id)) {
+        try {
+          const { data: appData } = await supabase
+            .from('creator_applications')
+            .select('profession, profession_other, applicant_role, applicant_role_other, education, education_details, experience_level, location, skills, project_types, github_url, portfolio_url, linkedin_url, other_url, bio')
+            .eq('user_id', userId)
+            .eq('status', 'approved')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (appData) {
+            row.profession = appData.profession_other || appData.profession || row.profession;
+            row.current_role = appData.applicant_role_other || appData.applicant_role || row.current_role;
+            row.education = appData.education || row.education;
+            row.education_details = appData.education_details || row.education_details;
+            row.experience_level = appData.experience_level || row.experience_level;
+            row.location = appData.location || row.location;
+            row.skills = appData.skills || row.skills;
+            row.project_types = appData.project_types || row.project_types;
+            if (!row.bio && appData.bio) {
+              row.bio = appData.bio;
+            }
+            const sl: SocialLinks = { ...(row.social_links || {}) };
+            if (appData.github_url && !sl.github) sl.github = appData.github_url;
+            if (appData.linkedin_url && !sl.linkedin) sl.linkedin = appData.linkedin_url;
+            if (appData.portfolio_url && !sl.website && !sl.portfolio) sl.website = appData.portfolio_url;
+            if (appData.other_url && !sl.other) sl.other = appData.other_url;
+            row.social_links = sl;
+          }
+        } catch {
+          // Gracefully continue with base profile if RLS restricts direct query
         }
       }
 
@@ -546,3 +599,82 @@ export function useCreatorApplication(): UseCreatorApplicationResult {
 
   return { application, loading, error, refresh: fetchApplication };
 }
+
+export interface FeaturedCreator {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  role: string;
+  bio: string | null;
+  projects_count: number;
+}
+
+export interface UseFeaturedCreatorsResult {
+  creators: FeaturedCreator[];
+  loading: boolean;
+}
+
+/** Fetches real verified creators and their project counts for the homepage. */
+export function useFeaturedCreators(): UseFeaturedCreatorsResult {
+  const [creators, setCreators] = useState<FeaturedCreator[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        // Fetch public profiles that are creators, admins, or owners
+        const { data: profs, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, role, bio, creator_approved_at')
+          .or('role.eq.creator,role.eq.admin,role.eq.owner,creator_approved_at.not.is.null')
+          .limit(12);
+
+        if (profErr || !profs) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
+
+        // Fetch published projects to count per creator
+        const { data: projs } = await supabase
+          .from('projects')
+          .select('id, created_by')
+          .eq('published', true);
+
+        const countMap: Record<string, number> = {};
+        if (projs) {
+          for (const p of projs) {
+            if (p.created_by) {
+              countMap[p.created_by] = (countMap[p.created_by] || 0) + 1;
+            }
+          }
+        }
+
+        if (!cancelled) {
+          const list: FeaturedCreator[] = profs.map((p) => ({
+            id: p.id,
+            full_name: p.full_name,
+            avatar_url: p.avatar_url,
+            role: resolveUserRole(p.id, p.role),
+            bio: p.bio,
+            projects_count: countMap[p.id] || 0,
+          }));
+
+          // Sort by project count descending
+          list.sort((a, b) => b.projects_count - a.projects_count);
+          setCreators(list);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  return { creators, loading };
+}
+

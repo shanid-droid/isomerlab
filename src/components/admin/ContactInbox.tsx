@@ -19,6 +19,13 @@ const ContactInbox: React.FC<ContactInboxProps> = ({ onCountsChange }) => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   const fetchMessages = useCallback(async () => {
     setLoading(true);
@@ -96,28 +103,31 @@ const ContactInbox: React.FC<ContactInboxProps> = ({ onCountsChange }) => {
 
       setMessages(prev => prev.map(m => m.id === id ? { ...m, status } : m));
       setSelectedMessage(prev => prev?.id === id ? { ...prev, status } : prev);
+      showToast(`Message marked as ${status}`);
     } catch {
-      alert('Unable to update message. Please try again.');
+      showToast('Unable to update message. Please try again.', 'error');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const deleteMessage = async (id: string) => {
-    if (!confirm('Delete this message permanently?')) return;
+  const deleteMessage = async () => {
+    if (!confirmDeleteId) return;
     setActionLoading(true);
     try {
       const { error: deleteError } = await supabase
         .from('contact_messages')
         .delete()
-        .eq('id', id);
+        .eq('id', confirmDeleteId);
 
       if (deleteError) throw deleteError;
 
-      setMessages(prev => prev.filter(m => m.id !== id));
-      if (selectedMessage?.id === id) setSelectedMessage(null);
+      setMessages(prev => prev.filter(m => m.id !== confirmDeleteId));
+      if (selectedMessage?.id === confirmDeleteId) setSelectedMessage(null);
+      setConfirmDeleteId(null);
+      showToast('Message deleted successfully.');
     } catch (err: unknown) {
-      alert('Unable to delete message. Please try again.');
+      showToast('Unable to delete message. Please try again.', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -154,6 +164,17 @@ const ContactInbox: React.FC<ContactInboxProps> = ({ onCountsChange }) => {
 
   return (
     <div className="space-y-6">
+      {toastMsg && (
+        <div className={`p-4 rounded-xl border font-mono-custom text-xs flex items-center justify-between gap-3 animate-fade-in ${
+          toastMsg.type === 'success'
+            ? 'border-eg/40 bg-eg/10 text-eg'
+            : 'border-red-500/40 bg-red-500/10 text-red-300'
+        }`}>
+          <span>{toastMsg.type === 'success' ? '✓ ' : '✕ '}{toastMsg.text}</span>
+          <button onClick={() => setToastMsg(null)} className="text-white/40 hover:text-white text-xs">✕</button>
+        </div>
+      )}
+
       {/* Metric cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="glass rounded-xl p-5 border border-eg/15 relative overflow-hidden">
@@ -353,7 +374,7 @@ const ContactInbox: React.FC<ContactInboxProps> = ({ onCountsChange }) => {
                 )}
                 <button
                   disabled={actionLoading}
-                  onClick={() => deleteMessage(selectedMessage.id)}
+                  onClick={() => setConfirmDeleteId(selectedMessage.id)}
                   className="px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 font-mono-custom text-[10px] tracking-wider hover:bg-red-500/20 transition-colors disabled:opacity-50"
                 >
                   Delete
@@ -378,6 +399,37 @@ const ContactInbox: React.FC<ContactInboxProps> = ({ onCountsChange }) => {
           )}
         </div>
       </div>
+
+      {/* Delete Message Confirm Dialog */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="glass rounded-2xl border border-red-500/40 p-6 max-w-md w-full space-y-4">
+            <h3 className="font-display text-sm font-bold text-white">Delete Message</h3>
+            <p className="font-sans text-xs text-white/70">
+              Are you sure you want to permanently delete this contact message? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(null)}
+                disabled={actionLoading}
+                className="px-4 py-2 rounded-xl border border-white/15 font-mono-custom text-xs text-white/60 hover:text-white hover:border-white/30 transition-colors"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={deleteMessage}
+                disabled={actionLoading}
+                className="px-4 py-2 rounded-xl font-mono-custom text-xs bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30 transition-colors flex items-center gap-2"
+              >
+                {actionLoading && <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />}
+                {actionLoading ? 'DELETING...' : 'DELETE MESSAGE'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

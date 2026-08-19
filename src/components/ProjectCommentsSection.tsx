@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useUserProfile } from '../lib/hooks';
 import { useProjectComments } from '../lib/projectInteractionHooks';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import type { ProjectCommentWithProfile } from '../lib/types';
 import { isAdminRole, isCreatorRole, isOwner } from '../lib/roles';
 
@@ -49,6 +50,8 @@ export const ProjectCommentsSection: React.FC<ProjectCommentsSectionProps> = ({
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editInput, setEditInput] = useState('');
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const currentUserId = profile?.id ?? null;
   const isProjectOwner = !!currentUserId && !!projectOwnerId && currentUserId === projectOwnerId;
@@ -91,6 +94,17 @@ export const ProjectCommentsSection: React.FC<ProjectCommentsSectionProps> = ({
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetId) return;
+    setDeleting(true);
+    try {
+      await softDeleteComment(deleteTargetId);
+      setDeleteTargetId(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const renderSingleComment = (comment: ProjectCommentWithProfile, isReply = false) => {
     const isAuthor = !!currentUserId && currentUserId === comment.user_id;
     const canModify = isAuthor || isProjectOwner || isAdmin;
@@ -111,7 +125,8 @@ export const ProjectCommentsSection: React.FC<ProjectCommentsSectionProps> = ({
         {/* Pinned Badge */}
         {comment.is_pinned && (
           <div className="flex items-center gap-1.5 font-mono-custom text-[10px] text-eg font-semibold uppercase tracking-widest mb-2.5">
-            <span className="animate-bounce">📌</span> PINNED COMMENT
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3H5a2 2 0 00-2 2v14l7-3 7 3V5a2 2 0 00-2-2z"/></svg>
+            PINNED
           </div>
         )}
 
@@ -187,7 +202,7 @@ export const ProjectCommentsSection: React.FC<ProjectCommentsSectionProps> = ({
               {canModify && (
                 <button
                   type="button"
-                  onClick={() => softDeleteComment(comment.id)}
+                  onClick={() => setDeleteTargetId(comment.id)}
                   className="px-2 py-1 rounded text-[10px] font-mono-custom text-white/40 hover:text-red-400 transition-colors"
                 >
                   DELETE
@@ -310,14 +325,26 @@ export const ProjectCommentsSection: React.FC<ProjectCommentsSectionProps> = ({
           <div className="w-6 h-6 rounded-full border-2 border-eg/30 border-t-eg animate-spin mx-auto" />
         </div>
       ) : comments.length === 0 ? (
-        <div className="p-8 rounded-2xl border border-white/5 glass text-center font-mono-custom text-xs text-white/30 uppercase tracking-widest">
-          NO COMMENTS YET. BE THE FIRST CREATOR TO COMMENT!
+        <div className="p-8 rounded-2xl border border-white/5 glass text-center">
+          <p className="font-mono-custom text-[10px] tracking-widest text-white/30 uppercase">No comments yet</p>
+          <p className="font-sans text-xs text-white/40 mt-1">Be the first creator to start the conversation.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {comments.map(c => renderSingleComment(c, false))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Comment?"
+        message="This action cannot be undone. The comment will be removed from the project page."
+        confirmLabel="Delete Comment"
+        variant="danger"
+        loading={deleting}
+      />
     </section>
   );
 };

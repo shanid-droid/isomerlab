@@ -3,10 +3,9 @@
  */
 
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { IsomerLogo } from '../components/ui';
 import { useNotifications } from '../lib/notificationHooks';
 import { useUserProfile } from '../lib/hooks';
+import { UserWorkspaceHeader } from '../components/ui/UserWorkspaceHeader';
 import type { NotificationType } from '../lib/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -83,43 +82,21 @@ const NotificationsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-dark bg-circuit text-white flex flex-col selection:bg-eg/30">
-      {/* Header */}
-      <header className="glass-dark border-b border-eg/10 sticky top-0 z-30 py-4 px-6">
-        <div className="max-w-4xl mx-auto flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <Link to="/">
-              <IsomerLogo size="md" />
-            </Link>
-            <div className="h-5 w-px bg-eg/20 hidden sm:block" />
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-eg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              <span className="font-mono-custom text-[10px] tracking-widest text-eg/80 uppercase bg-eg/10 px-2.5 py-1 rounded border border-eg/30 hidden sm:inline-block">
-                NOTIFICATIONS
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllRead}
-                className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10 hover:border-eg/20"
-              >
-                ✓ Mark all read ({unreadCount})
-              </button>
-            )}
-            <Link
-              to={getDashboardPath()}
-              className="font-mono-custom text-xs text-white/60 hover:text-eg transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10"
+      <UserWorkspaceHeader
+        badge="NOTIFICATIONS"
+        backTo={{ label: '← Dashboard', path: getDashboardPath() }}
+        actions={
+          unreadCount > 0 ? (
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="font-mono-custom text-xs text-eg/80 hover:text-eg transition-colors px-2.5 py-1.5 rounded-lg border border-eg/30"
             >
-              ← Dashboard
-            </Link>
-          </div>
-        </div>
-      </header>
+              Mark all read ({unreadCount})
+            </button>
+          ) : undefined
+        }
+      />
 
       {/* Main content */}
       <main className="flex-1 max-w-4xl w-full min-w-0 mx-auto px-4 sm:px-6 py-10 space-y-6">

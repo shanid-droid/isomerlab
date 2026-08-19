@@ -1,10 +1,13 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import { Navbar }      from './components/ui';
-import Hero            from './components/Hero';
-import AboutMission    from './components/AboutMission';
-import Projects        from './components/Projects';
-import Contact, { Footer } from './components/ContactFooter';
+import { Navbar }               from './components/ui';
+import Hero                     from './components/Hero';
+import FeaturedProjectSection   from './components/FeaturedProjectSection';
+import TypographyExperience     from './components/TypographyExperience';
+import TheLabSection            from './components/TheLabSection';
+import CreatorsSection          from './components/CreatorsSection';
+import ProjectDiscoverySection  from './components/ProjectDiscoverySection';
+import FinalCtaFooter           from './components/FinalCtaFooter';
 import AdminLogin      from './pages/AdminLogin';
 import AdminDashboard  from './pages/AdminDashboard';
 import ProjectDetail   from './pages/ProjectDetail';
@@ -23,7 +26,7 @@ import LeaderboardPage from './pages/Leaderboard';
 import { supabase } from './lib/supabase';
 import { getPostLoginPath } from './lib/roles';
 
-/* ── Home page (single-page layout) ──────────────────────────────── */
+/* ── Home page (scene-based laboratory layout) ───────────────────── */
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -47,15 +50,17 @@ const HomePage: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-dark text-white overflow-x-hidden">
+    <div className="min-h-screen bg-dark text-white overflow-x-hidden selection:bg-eg/30">
       <Navbar />
       <main>
         <Hero />
-        <AboutMission />
-        <Projects />
-        <Contact />
+        <FeaturedProjectSection />
+        <TypographyExperience />
+        <TheLabSection />
+        <CreatorsSection />
+        <ProjectDiscoverySection />
       </main>
-      <Footer />
+      <FinalCtaFooter />
     </div>
   );
 };

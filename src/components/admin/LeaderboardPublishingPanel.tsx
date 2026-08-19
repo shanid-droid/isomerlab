@@ -39,6 +39,12 @@ export const LeaderboardPublishingPanel: React.FC = () => {
     message: '',
     onConfirm: async () => {},
   });
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   useEffect(() => {
     fetchSnapshotsHistory();
@@ -104,6 +110,17 @@ export const LeaderboardPublishingPanel: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {toastMsg && (
+        <div className={`p-4 rounded-xl border font-mono-custom text-xs flex items-center justify-between gap-3 animate-fade-in ${
+          toastMsg.type === 'success'
+            ? 'border-eg/40 bg-eg/10 text-eg'
+            : 'border-red-500/40 bg-red-500/10 text-red-300'
+        }`}>
+          <span>{toastMsg.type === 'success' ? '✓ ' : '✕ '}{toastMsg.text}</span>
+          <button onClick={() => setToastMsg(null)} className="text-white/40 hover:text-white text-xs">✕</button>
+        </div>
+      )}
 
       {actionError && (
         <div className="p-4 rounded-xl border border-red-500/50 bg-red-500/10 text-red-400 font-mono-custom text-xs">
@@ -359,7 +376,7 @@ export const LeaderboardPublishingPanel: React.FC = () => {
                     await confirmModal.onConfirm();
                     setConfirmModal({ ...confirmModal, open: false });
                   } catch (err: any) {
-                    alert(`Action failed: ${err.message}`);
+                    showToast(`Action failed: ${err.message}`, 'error');
                   }
                 }}
                 className="btn-primary px-5 py-2 text-xs font-mono-custom"

@@ -63,6 +63,7 @@ export interface Project {
   published?: boolean;
   created_by?: string | null;
   created_at?: string;
+  views_count?: number | null;
   versions?: ProjectVersion[] | null;
 }
 
@@ -136,6 +137,7 @@ export interface SocialLinks {
   instagram?: string;
   website?: string;
   youtube?: string;
+  discord?: string;
   [key: string]: string | undefined;
 }
 
@@ -154,6 +156,15 @@ export interface UserProfile {
   creator_requirement_status?: CreatorRequirementStatus | null;
   created_at?: string;
   updated_at?: string;
+  // Professional & Creator Details (from approved application / profile)
+  profession?: string | null;
+  current_role?: string | null;
+  education?: string | null;
+  education_details?: string | null;
+  experience_level?: string | null;
+  location?: string | null;
+  skills?: string | null;
+  project_types?: string | null;
 }
 
 export interface CreatorApplication {
