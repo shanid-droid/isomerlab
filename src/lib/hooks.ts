@@ -163,7 +163,7 @@ export function useProjectBySlug(slug: string | undefined): UseProjectBySlugResu
 
       const { data: galleryData, error: galleryError } = await supabase
         .from('project_gallery')
-        .select('*')
+        .select('id, project_id, version_id, image_url, sort_order, created_at, media_type, mime_type, duration_seconds')
         .eq('project_id', projData.id)
         .order('sort_order', { ascending: true, nullsFirst: false });
 

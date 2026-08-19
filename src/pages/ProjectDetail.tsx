@@ -9,99 +9,7 @@ import type { UserProfile, ProjectVersion, ProjectLink } from '../lib/types';
 import { LikeButton } from '../components/LikeButton';
 import { ProjectCommentsSection } from '../components/ProjectCommentsSection';
 import { ProjectLinksDisplay } from '../components/ProjectLinks';
-
-/* ── Lightbox Modal ──────────────────────────────────────────────── */
-const LightboxModal: React.FC<{
-  images: string[];
-  currentIndex: number;
-  onClose: () => void;
-  onSelectIndex: (idx: number) => void;
-}> = ({ images, currentIndex, onClose, onSelectIndex }) => {
-  const total = images.length;
-  const currentUrl = images[currentIndex];
-
-  const handlePrev = useCallback(() => {
-    onSelectIndex((currentIndex - 1 + total) % total);
-  }, [currentIndex, total, onSelectIndex]);
-
-  const handleNext = useCallback(() => {
-    onSelectIndex((currentIndex + 1) % total);
-  }, [currentIndex, total, onSelectIndex]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft' && total > 1) handlePrev();
-      if (e.key === 'ArrowRight' && total > 1) handleNext();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, handlePrev, handleNext, total]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fade-in"
-      onClick={onClose}
-    >
-      <div className="relative max-w-6xl w-full flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
-        <div className="w-full flex items-center justify-between px-2 text-white/70">
-          <div className="font-mono-custom text-xs tracking-widest text-eg/90 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-eg animate-pulse" />
-            IMAGE {currentIndex + 1} OF {total}
-          </div>
-          <button
-            onClick={onClose}
-            className="font-mono-custom text-xs text-white/60 hover:text-eg tracking-widest transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10 glass"
-          >
-            CLOSE [ESC ✕]
-          </button>
-        </div>
-
-        <div className="relative border border-eg/30 rounded-2xl overflow-hidden glass p-2 max-h-[75vh] w-full flex items-center justify-center shadow-2xl group">
-          <img
-            src={currentUrl}
-            alt={`Gallery view ${currentIndex + 1}`}
-            className="max-h-[72vh] max-w-full object-contain rounded-xl transition-all duration-300"
-          />
-          <div className="absolute top-4 left-4 w-5 h-5 border-t-2 border-l-2 border-eg/70" />
-          <div className="absolute top-4 right-4 w-5 h-5 border-t-2 border-r-2 border-eg/70" />
-          <div className="absolute bottom-4 left-4 w-5 h-5 border-b-2 border-l-2 border-eg/70" />
-          <div className="absolute bottom-4 right-4 w-5 h-5 border-b-2 border-r-2 border-eg/70" />
-
-          {total > 1 && (
-            <button
-              onClick={handlePrev}
-              aria-label="Previous image"
-              className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full glass border border-eg/40 text-eg flex items-center justify-center hover:bg-eg/20 hover:scale-110 transition-all"
-            >←</button>
-          )}
-          {total > 1 && (
-            <button
-              onClick={handleNext}
-              aria-label="Next image"
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full glass border border-eg/40 text-eg flex items-center justify-center hover:bg-eg/20 hover:scale-110 transition-all"
-            >→</button>
-          )}
-        </div>
-
-        {total > 1 && (
-          <div className="flex items-center gap-2 overflow-x-auto max-w-full p-2">
-            {images.map((url, idx) => (
-              <button
-                key={idx}
-                onClick={() => onSelectIndex(idx)}
-                className={`w-14 h-10 rounded-lg overflow-hidden border transition-all flex-shrink-0 ${idx === currentIndex ? 'border-eg ring-2 ring-eg/50 scale-105' : 'border-white/20 opacity-50 hover:opacity-100'
-                  }`}
-              >
-                <img src={url} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
+import { ProjectGallery } from '../components/ProjectGallery';
 
 /* ── Skeleton Loading State ──────────────────────────────────────── */
 const Skeleton: React.FC = () => (
@@ -203,7 +111,6 @@ const ProjectDetail: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { versions: projectVersions } = useProjectVersions(project?.id);
   useRecordProjectView(project?.id);
-  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const headerRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
 
@@ -283,17 +190,6 @@ const ProjectDetail: React.FC = () => {
     ? activeVersion.project_links
     : (project?.project_links ?? []);
   const versionThumbnail = activeVersion?.thumbnail_url ?? project?.thumbnail_url ?? null;
-  const versionGallery = React.useMemo(() => {
-    if (!activeVersion) return gallery;
-    const matched = gallery.filter(item => item.version_id === activeVersion.id);
-    if (matched.length > 0) return matched;
-    // Fallback: If this is the default version, include untagged legacy images
-    if (activeVersion.is_default) {
-      const untagged = gallery.filter(item => !item.version_id);
-      if (untagged.length > 0) return untagged;
-    }
-    return matched;
-  }, [gallery, activeVersion]);
 
   const descriptionText = versionDescription || '';
   const firstParagraphEnd = descriptionText.indexOf('\n\n');
@@ -509,55 +405,7 @@ const ProjectDetail: React.FC = () => {
             </div>
 
             {/* 8. Gallery */}
-            <div className="space-y-4 pt-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-eg" />
-                  PROJECT GALLERY
-                  {versionGallery.length > 0 && (
-                    <span className="text-eg font-semibold">({versionGallery.length})</span>
-                  )}
-                </h3>
-                {versionGallery.length > 0 && (
-                  <span className="font-mono-custom text-[10px] text-white/30 uppercase tracking-widest">
-                    CLICK IMAGE TO ENLARGE
-                  </span>
-                )}
-              </div>
-
-              {versionGallery.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-                  {versionGallery.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      onClick={() => setSelectedImageIndex(idx)}
-                      className="group relative rounded-2xl overflow-hidden glass border border-eg/20 h-52 cursor-pointer transition-all duration-500 hover:border-eg/70 hover:shadow-eg-sm"
-                    >
-                      <img
-                        src={item.image_url}
-                        alt={`Gallery media ${idx + 1}`}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                        loading="lazy"
-                      />
-                      <div className="absolute inset-0 bg-dark-100/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2">
-                        <span className="font-mono-custom text-[11px] text-eg tracking-widest border border-eg/50 px-3.5 py-1.5 rounded-lg bg-dark/90 shadow-lg">
-                          VIEW FULL MEDIA ↗
-                        </span>
-                      </div>
-                      <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-eg/60 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-eg/60 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="glass rounded-2xl p-8 border border-white/5 text-center flex flex-col items-center justify-center gap-3">
-                  <div className="w-12 h-12 rounded-full border border-white/10 bg-dark-200/50 flex items-center justify-center text-white/30">📷</div>
-                  <p className="font-mono-custom text-xs tracking-widest text-white/30 uppercase">
-                    NO ADDITIONAL GALLERY MEDIA AVAILABLE FOR THIS PROJECT
-                  </p>
-                </div>
-              )}
-            </div>
+            <ProjectGallery gallery={gallery} activeVersion={activeVersion} />
 
             {/* 8.5 Comments Section */}
             <ProjectCommentsSection projectId={project.id} projectOwnerId={project.created_by} />
@@ -582,15 +430,7 @@ const ProjectDetail: React.FC = () => {
         )}
       </main>
 
-      {/* Lightbox */}
-      {selectedImageIndex !== null && versionGallery.length > 0 && (
-        <LightboxModal
-          images={versionGallery.map(item => item.image_url)}
-          currentIndex={selectedImageIndex}
-          onClose={() => setSelectedImageIndex(null)}
-          onSelectIndex={(idx) => setSelectedImageIndex(idx)}
-        />
-      )}
+
 
       {/* Footer */}
       <footer className="border-t border-eg/10 py-6 mt-auto">

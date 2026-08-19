@@ -10,6 +10,7 @@ import type { Project, ProjectGalleryItem, ProjectLink, ProjectVersion } from '.
 import { useCreateProjectVersion, useUpdateProjectVersion, useDeleteProjectVersion, useSetDefaultProjectVersion } from '../lib/projectVersionHooks';
 import { CREATOR_REQUIREMENT_DAYS } from '../lib/constants';
 import { isCreatorRole } from '../lib/roles';
+import { formatDuration } from '../components/ProjectGallery';
 
 type CreatorView = 'dashboard' | 'projects' | 'requirements';
 
@@ -38,7 +39,15 @@ const CreatorDashboard: React.FC = () => {
   const [formPublished, setFormPublished] = useState(true);
   const [formThumbnailFile, setFormThumbnailFile] = useState<File | null>(null);
   const [formThumbnailPreview, setFormThumbnailPreview] = useState<string | null>(null);
-  const [formGalleryFiles, setFormGalleryFiles] = useState<File[]>([]);
+  const [pendingGalleryItems, setPendingGalleryItems] = useState<{
+    id: string;
+    file: File;
+    previewUrl: string;
+    mediaType: 'image' | 'video';
+    mimeType: string;
+    duration: number | null;
+    sizeFormatted: string;
+  }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitStatusText, setSubmitStatusText] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -315,12 +324,100 @@ const CreatorDashboard: React.FC = () => {
     if (idx !== -1) await supabase.storage.from('project-images').remove([url.substring(idx + marker.length)]);
   };
 
+  const getVideoDuration = (file: File): Promise<number | null> => {
+    return new Promise((resolve) => {
+      try {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        const objectUrl = URL.createObjectURL(file);
+        video.src = objectUrl;
+
+        const cleanUp = () => {
+          URL.revokeObjectURL(objectUrl);
+        };
+
+        video.onloadedmetadata = () => {
+          const dur = video.duration;
+          cleanUp();
+          if (typeof dur === 'number' && !isNaN(dur) && isFinite(dur) && dur > 0) {
+            resolve(Math.round(dur * 100) / 100);
+          } else {
+            resolve(null);
+          }
+        };
+
+        video.onerror = () => {
+          cleanUp();
+          resolve(null);
+        };
+
+        setTimeout(() => {
+          cleanUp();
+          resolve(null);
+        }, 4000);
+      } catch {
+        resolve(null);
+      }
+    });
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleGalleryFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const selectedFiles = Array.from(e.target.files);
+    const newPending: {
+      id: string;
+      file: File;
+      previewUrl: string;
+      mediaType: 'image' | 'video';
+      mimeType: string;
+      duration: number | null;
+      sizeFormatted: string;
+    }[] = [];
+
+    for (const file of selectedFiles) {
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv)$/i.test(file.name);
+      const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|svg|avif)$/i.test(file.name);
+
+      if (!isVideo && !isImage) {
+        console.warn('[CreatorDashboard] Unsupported file type skipped:', file.name, file.type);
+        continue;
+      }
+
+      const mediaType: 'image' | 'video' = isVideo ? 'video' : 'image';
+      const previewUrl = URL.createObjectURL(file);
+      let duration: number | null = null;
+      if (isVideo) {
+        duration = await getVideoDuration(file);
+      }
+
+      newPending.push({
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        file,
+        previewUrl,
+        mediaType,
+        mimeType: file.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+        duration,
+        sizeFormatted: formatFileSize(file.size),
+      });
+    }
+
+    setPendingGalleryItems((prev) => [...prev, ...newPending]);
+    e.target.value = '';
+  };
+
   const handleOpenAdd = () => {
     setEditingProject(null);
     setFormTitle(''); setFormSlug(''); setFormDescription(''); setFormComponents('');
     setFormGithubUrl(''); setFormProjectLinks([]); setFormPublished(true);
     setFormThumbnailFile(null); setFormThumbnailPreview(null);
-    setFormGalleryFiles([]); setExistingGallery([]); setDeletingGalleryIds([]); setFormError(null);
+    setPendingGalleryItems([]); setExistingGallery([]); setDeletingGalleryIds([]); setFormError(null);
     setIsModalOpen(true);
   };
 
@@ -348,9 +445,18 @@ const CreatorDashboard: React.FC = () => {
 
     setFormPublished(project.published !== false);
     setFormThumbnailPreview(project.thumbnail_url || null);
-    setFormThumbnailFile(null); setFormGalleryFiles([]);
-    setDeletingGalleryIds([]); setFormError(null); setIsModalOpen(true);
-    const { data } = await supabase.from('project_gallery').select('*').eq('project_id', project.id).order('sort_order');
+    setFormThumbnailFile(null);
+    setPendingGalleryItems([]);
+    setDeletingGalleryIds([]);
+    setFormError(null);
+    setIsModalOpen(true);
+
+    const { data } = await supabase
+      .from('project_gallery')
+      .select('id, project_id, version_id, image_url, sort_order, created_at, media_type, mime_type, duration_seconds')
+      .eq('project_id', project.id)
+      .order('sort_order');
+
     setExistingGallery((data as ProjectGalleryItem[]) || []);
     await fetchVersions(project.id);
   };
@@ -397,17 +503,70 @@ const CreatorDashboard: React.FC = () => {
         if (error) throw error;
         projectId = data.id;
       }
+
+      // Delete removed gallery records and storage files
       if (deletingGalleryIds.length > 0) {
-        await supabase.from('project_gallery').delete().in('id', deletingGalleryIds);
-      }
-      if (formGalleryFiles.length > 0 && projectId) {
-        const inserts = [];
-        for (let i = 0; i < formGalleryFiles.length; i++) {
-          const url = await uploadFile(formGalleryFiles[i], 'gallery');
-          inserts.push({ project_id: projectId, image_url: url, sort_order: existingGallery.length + i });
+        setSubmitStatusText('Removing deleted gallery media...');
+        const toDelete = existingGallery.filter(item => deletingGalleryIds.includes(item.id));
+        for (const item of toDelete) {
+          if (item.image_url) await removeStorageFile(item.image_url);
         }
-        await supabase.from('project_gallery').insert(inserts);
+        const { error: delError } = await supabase.from('project_gallery').delete().in('id', deletingGalleryIds);
+        if (delError) {
+          console.warn('[CreatorDashboard] Gallery deletion warning:', delError);
+        }
       }
+
+      // Upload new gallery files (both images and videos)
+      if (pendingGalleryItems.length > 0 && projectId) {
+        const defaultVersion = versions.find(v => v.is_default) || versions[0];
+        const targetVersionId = defaultVersion?.id || null;
+
+        const inserts = [];
+        const startOrder = existingGallery.length;
+
+        for (let i = 0; i < pendingGalleryItems.length; i++) {
+          const item = pendingGalleryItems[i];
+          const mediaLabel = item.mediaType === 'video' ? 'video' : 'image';
+          setSubmitStatusText(`Uploading ${mediaLabel} ${i + 1}/${pendingGalleryItems.length} (${item.sizeFormatted})...`);
+
+          const cleanName = item.file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const path = `gallery/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${cleanName}`;
+
+          const { error: uploadError } = await supabase.storage.from('project-images').upload(path, item.file, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+          if (uploadError) {
+            console.error('[CreatorDashboard] Storage upload error:', uploadError);
+            throw new Error(`Upload failed for ${item.file.name}: ${uploadError.message}`);
+          }
+
+          const { data: urlData } = supabase.storage.from('project-images').getPublicUrl(path);
+          if (!urlData?.publicUrl) {
+            throw new Error(`Failed to obtain public URL for ${item.file.name}`);
+          }
+
+          inserts.push({
+            project_id: projectId,
+            version_id: targetVersionId,
+            image_url: urlData.publicUrl,
+            media_type: item.mediaType,
+            mime_type: item.mimeType,
+            duration_seconds: item.duration,
+            sort_order: startOrder + i,
+          });
+        }
+
+        setSubmitStatusText('Saving gallery records...');
+        const { error: galleryError } = await supabase.from('project_gallery').insert(inserts);
+        if (galleryError) {
+          console.error('[CreatorDashboard] Database insert error for project_gallery:', galleryError);
+          throw new Error(`Failed to save gallery records: ${galleryError.message}`);
+        }
+      }
+
       setIsModalOpen(false);
       if (currentUserId) await fetchProjects(currentUserId);
       await supabase.rpc('sync_creator_requirement_status');
@@ -703,9 +862,113 @@ const CreatorDashboard: React.FC = () => {
                 <input type="file" accept="image/*" onChange={e => { if (e.target.files?.[0]) { setFormThumbnailFile(e.target.files[0]); setFormThumbnailPreview(URL.createObjectURL(e.target.files[0])); } }} className="text-xs text-white/50" />
                 <ThumbnailPromptSection projectName={formTitle} projectDescription={formDescription} hasProductImage={!!(formThumbnailFile || formThumbnailPreview)} />
               </div>
-              <div>
-                <label className="font-mono-custom text-[10px] text-white/50 uppercase block mb-2">Gallery Images</label>
-                <input type="file" multiple accept="image/*" onChange={e => { if (e.target.files) setFormGalleryFiles(prev => [...prev, ...Array.from(e.target.files!)]); }} className="text-xs text-white/50" />
+              {/* Project Gallery */}
+              <div className="space-y-3 pt-3 border-t border-eg/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="font-mono-custom text-[11px] text-white/70 uppercase block">
+                      PROJECT GALLERY (IMAGES & VIDEOS)
+                    </label>
+                    <span className="font-mono-custom text-[9px] text-white/40 block">
+                      Accepted: PNG, JPG, JPEG, WEBP, GIF, MP4, WEBM, MOV
+                    </span>
+                  </div>
+                </div>
+
+                {/* Existing Gallery Media List */}
+                {existingGallery.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="font-mono-custom text-[10px] text-white/40 uppercase">
+                      Existing Gallery Items ({existingGallery.length}):
+                    </span>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {existingGallery.map((item) => {
+                        const isVideo = item.media_type === 'video' || (item.mime_type && item.mime_type.startsWith('video/'));
+                        const durFormatted = formatDuration(item.duration_seconds);
+                        return (
+                          <div key={item.id} className="relative aspect-video rounded-lg overflow-hidden border border-eg/20 bg-dark-400 group flex items-center justify-center">
+                            {isVideo ? (
+                              <div className="w-full h-full flex flex-col items-center justify-center p-1 text-center bg-black/60">
+                                <span className="font-mono-custom text-[9px] text-eg font-bold flex items-center gap-1">
+                                  ▶ VIDEO
+                                </span>
+                                {durFormatted && (
+                                  <span className="font-mono-custom text-[8px] text-white/60 mt-0.5">
+                                    {durFormatted}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <img src={item.image_url} alt="Gallery item" className="w-full h-full object-cover" />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeletingGalleryIds(prev => [...prev, item.id]);
+                                setExistingGallery(prev => prev.filter(g => g.id !== item.id));
+                              }}
+                              className="absolute inset-0 bg-red-950/85 text-red-300 font-mono-custom text-[10px] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer font-bold"
+                            >
+                              REMOVE [✕]
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Newly Selected Gallery Media List */}
+                {pendingGalleryItems.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="font-mono-custom text-[10px] text-eg uppercase">
+                      Selected Media to Upload ({pendingGalleryItems.length}):
+                    </span>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {pendingGalleryItems.map((item, i) => (
+                        <div key={item.id} className="relative aspect-video rounded-lg overflow-hidden border border-eg/40 bg-dark-400 group flex items-center justify-center">
+                          {item.mediaType === 'video' ? (
+                            <div className="w-full h-full flex flex-col items-center justify-center p-1 text-center bg-black/70">
+                              <span className="font-mono-custom text-[9px] text-eg font-bold flex items-center gap-1">
+                                ▶ VIDEO
+                              </span>
+                              <span className="font-mono-custom text-[8px] text-white/60 truncate max-w-[90%]">
+                                {item.duration ? `${formatDuration(item.duration)} · ` : ''}{item.sizeFormatted}
+                              </span>
+                            </div>
+                          ) : (
+                            <img src={item.previewUrl} alt="" className="w-full h-full object-cover" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+                              setPendingGalleryItems(prev => prev.filter((_, idx) => idx !== i));
+                            }}
+                            className="absolute top-1 right-1 bg-black/80 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] cursor-pointer transition-colors shadow"
+                            title="Remove item"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* File picker input */}
+                <div>
+                  <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-eg/40 bg-eg/10 hover:bg-eg/20 text-eg font-mono-custom text-xs cursor-pointer transition-colors">
+                    <span>+ Add Image / Video</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,video/*"
+                      onChange={handleGalleryFilesChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-eg/10">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="text-xs text-white/50">CANCEL</button>

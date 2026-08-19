@@ -379,7 +379,7 @@ const AdminDashboard: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('project_gallery')
-        .select('*')
+        .select('id, project_id, version_id, image_url, sort_order, created_at, media_type, mime_type, duration_seconds')
         .eq('project_id', project.id)
         .order('sort_order', { ascending: true });
 
@@ -566,17 +566,52 @@ const AdminDashboard: React.FC = () => {
 
       // 4. Upload new gallery files and save records to `project_gallery`
       if (formGalleryFiles.length > 0 && projectId) {
-        setSubmitStatusText(`Uploading ${formGalleryFiles.length} gallery image(s)...`);
+        setSubmitStatusText(`Uploading ${formGalleryFiles.length} gallery media file(s)...`);
         
         const galleryInserts = [];
         let startOrder = existingGallery.length;
 
         for (let i = 0; i < formGalleryFiles.length; i++) {
           const file = formGalleryFiles[i];
+          const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv)$/i.test(file.name);
+          const mediaType = isVideo ? 'video' : 'image';
+
+          let duration: number | null = null;
+          if (isVideo) {
+            try {
+              const videoEl = document.createElement('video');
+              videoEl.preload = 'metadata';
+              const objUrl = URL.createObjectURL(file);
+              videoEl.src = objUrl;
+              await new Promise<void>((res) => {
+                videoEl.onloadedmetadata = () => {
+                  if (typeof videoEl.duration === 'number' && !isNaN(videoEl.duration) && videoEl.duration > 0) {
+                    duration = Math.round(videoEl.duration * 100) / 100;
+                  }
+                  URL.revokeObjectURL(objUrl);
+                  res();
+                };
+                videoEl.onerror = () => {
+                  URL.revokeObjectURL(objUrl);
+                  res();
+                };
+                setTimeout(() => {
+                  URL.revokeObjectURL(objUrl);
+                  res();
+                }, 3000);
+              });
+            } catch {
+              duration = null;
+            }
+          }
+
           const uploadedUrl = await uploadFileToSupabase(file, 'gallery');
           galleryInserts.push({
             project_id: projectId,
             image_url: uploadedUrl,
+            media_type: mediaType,
+            mime_type: file.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+            duration_seconds: duration,
             sort_order: startOrder + i,
           });
         }
@@ -1579,29 +1614,38 @@ const AdminDashboard: React.FC = () => {
                 />
               </div>
 
-              {/* Gallery Image Uploads */}
+              {/* Gallery Media Uploads */}
               <div className="space-y-3">
                 <label className="block font-mono-custom text-[11px] text-white/60 uppercase tracking-wider">
-                  PROJECT GALLERY IMAGES (MULTIPLE)
+                  PROJECT GALLERY MEDIA (IMAGES & VIDEOS)
                 </label>
 
-                {/* Existing Gallery Images list */}
+                {/* Existing Gallery Media list */}
                 {existingGallery.length > 0 && (
                   <div className="space-y-1.5">
                     <span className="font-mono-custom text-[10px] text-white/40 uppercase">Existing Gallery Items:</span>
                     <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                      {existingGallery.map((item) => (
-                        <div key={item.id} className="relative aspect-video rounded-lg overflow-hidden border border-eg/20 group">
-                          <img src={item.image_url} alt="Gallery item" className="w-full h-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveExistingGalleryItem(item.id)}
-                            className="absolute inset-0 bg-red-950/80 text-red-300 font-mono-custom text-[10px] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                          >
-                            REMOVE
-                          </button>
-                        </div>
-                      ))}
+                      {existingGallery.map((item) => {
+                        const isVid = item.media_type === 'video' || (item.mime_type && item.mime_type.startsWith('video/'));
+                        return (
+                          <div key={item.id} className="relative aspect-video rounded-lg overflow-hidden border border-eg/20 bg-dark-400 group flex items-center justify-center">
+                            {isVid ? (
+                              <div className="w-full h-full flex flex-col items-center justify-center p-1 text-center bg-black/60">
+                                <span className="font-mono-custom text-[9px] text-eg font-bold">▶ VIDEO</span>
+                              </div>
+                            ) : (
+                              <img src={item.image_url} alt="Gallery item" className="w-full h-full object-cover" />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveExistingGalleryItem(item.id)}
+                              className="absolute inset-0 bg-red-950/80 text-red-300 font-mono-custom text-[10px] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer font-bold"
+                            >
+                              REMOVE
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1609,20 +1653,30 @@ const AdminDashboard: React.FC = () => {
                 {/* Newly selected gallery previews */}
                 {formGalleryPreviews.length > 0 && (
                   <div className="space-y-1.5">
-                    <span className="font-mono-custom text-[10px] text-eg uppercase">New Images to Upload:</span>
+                    <span className="font-mono-custom text-[10px] text-eg uppercase">New Media to Upload:</span>
                     <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                      {formGalleryPreviews.map((url, i) => (
-                        <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-eg/40 group">
-                          <img src={url} alt="New gallery preview" className="w-full h-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveNewGalleryItem(i)}
-                            className="absolute top-1 right-1 bg-black/80 text-white hover:text-red-400 rounded-full w-5 h-5 flex items-center justify-center text-[10px]"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
+                      {formGalleryPreviews.map((url, i) => {
+                        const file = formGalleryFiles[i];
+                        const isVid = file && (file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv)$/i.test(file.name));
+                        return (
+                          <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-eg/40 bg-dark-400 group flex items-center justify-center">
+                            {isVid ? (
+                              <div className="w-full h-full flex flex-col items-center justify-center p-1 text-center bg-black/60">
+                                <span className="font-mono-custom text-[9px] text-eg font-bold">▶ VIDEO</span>
+                              </div>
+                            ) : (
+                              <img src={url} alt="New gallery preview" className="w-full h-full object-cover" />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveNewGalleryItem(i)}
+                              className="absolute top-1 right-1 bg-black/80 text-white hover:text-red-400 rounded-full w-5 h-5 flex items-center justify-center text-[10px] cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1630,15 +1684,15 @@ const AdminDashboard: React.FC = () => {
                 {/* Add Gallery Files Dropzone button */}
                 <label className="cursor-pointer border border-dashed border-eg/30 hover:border-eg rounded-xl p-4 text-center bg-dark-200/50 hover:bg-eg/5 transition-all block">
                   <span className="font-mono-custom text-xs text-eg block">
-                    + Add Gallery Images
+                    + Add Gallery Media (Images / Videos)
                   </span>
                   <span className="font-sans text-[10px] text-white/30 block mt-0.5">
-                    Select one or multiple screenshots/diagrams
+                    Select images (PNG, JPG, WEBP, GIF) or videos (MP4, WEBM, MOV)
                   </span>
                   <input
                     type="file"
                     multiple
-                    accept="image/*"
+                    accept="image/*,video/*"
                     onChange={handleGalleryChange}
                     className="hidden"
                   />

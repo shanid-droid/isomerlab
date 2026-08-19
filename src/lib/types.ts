@@ -83,11 +83,16 @@ export interface ProjectVersion {
   updated_at: string;
 }
 
+export type GalleryMediaType = 'image' | 'video';
+
 export interface ProjectGalleryItem {
   id: string;
   project_id: string;
   version_id?: string | null;
   image_url: string;
+  media_type: GalleryMediaType | string;
+  mime_type?: string | null;
+  duration_seconds?: number | null;
   sort_order?: number;
   created_at?: string;
 }
