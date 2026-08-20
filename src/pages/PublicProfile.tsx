@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { usePublicProfile, useCreatorProjects } from '../lib/hooks';
+import { useUserBadges } from '../lib/badgeCampaignHooks';
 import { supabase } from '../lib/supabase';
 import { IsomerLogo, ArrowRight } from '../components/ui';
+import { BadgeCard, BadgeDetailModal } from '../components/ui/BadgeVisual';
 import type { SocialLinks, Project } from '../lib/types';
+import type { UserBadge } from '../lib/types';
 import { isCreatorRole, isAdminRole, isOwner, formatRoleLabel } from '../lib/roles';
 
 /* ── Social Link Metadata & Icons ────────────────────────────────── */
@@ -222,6 +225,56 @@ const SectionLabel: React.FC<{ label: string }> = ({ label }) => (
     <div className="flex-1 h-px bg-white/5" />
   </div>
 );
+
+/* ── Profile Badges Section ───────────────────────────────────────── */
+const ProfileBadgesSection: React.FC<{ targetUserId?: string }> = ({ targetUserId }) => {
+  const { userBadges, loading } = useUserBadges(targetUserId);
+  const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
+
+  if (loading) {
+    return (
+      <div>
+        <SectionLabel label="Badges" />
+        <div className="flex gap-3 flex-wrap">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="w-20 h-20 rounded-2xl bg-dark-300/50 animate-pulse border border-eg/10" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!userBadges || userBadges.length === 0) return null;
+
+  return (
+    <div>
+      <SectionLabel label="Badges" />
+      <div className="glass-dark rounded-2xl p-6 border border-eg/15 relative overflow-hidden">
+        <div className="absolute top-3 left-3 w-4 h-4 border-t border-l border-eg/40" />
+        <div className="absolute bottom-3 right-3 w-4 h-4 border-b border-r border-eg/40" />
+        <div className="flex flex-wrap gap-3 relative z-10">
+          {userBadges.map((ub) => (
+            <BadgeCard
+              key={ub.id}
+              badge={ub.badge!}
+              userBadge={ub}
+              size="sm"
+              onClick={() => setSelectedBadge(ub)}
+            />
+          ))}
+        </div>
+      </div>
+      {selectedBadge && (
+        <BadgeDetailModal
+          isOpen={!!selectedBadge}
+          userBadge={selectedBadge}
+          badge={selectedBadge.badge ?? null}
+          onClose={() => setSelectedBadge(null)}
+        />
+      )}
+    </div>
+  );
+};
 
 /* ── Public Profile Page ──────────────────────────────────────────── */
 export const PublicProfile: React.FC = () => {
@@ -648,6 +701,11 @@ export const PublicProfile: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* ════════════════════════════════════════
+                BADGES
+            ════════════════════════════════════════ */}
+            <ProfileBadgesSection targetUserId={targetUserId} />
 
             {/* ════════════════════════════════════════
                 PROJECTS

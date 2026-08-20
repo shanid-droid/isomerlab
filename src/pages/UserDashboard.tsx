@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useUserProfile, useCreatorApplication } from '../lib/hooks';
 import { useUserDashboardData } from '../lib/userDashboardHooks';
+import { useUserBadges, useUserCampaigns } from '../lib/badgeCampaignHooks';
 import { ArrowRight } from '../components/ui';
 import { UserWorkspaceHeader } from '../components/ui/UserWorkspaceHeader';
 import { ProjectMiniCard, formatRelativeTime } from '../components/ui/ProjectMiniCard';
 import { DashboardSkeleton } from '../components/ui/Skeleton';
+import { BadgeCard, BadgeDetailModal } from '../components/ui/BadgeVisual';
 import { logAuthEvent } from '../lib/activityLog';
 import type { CreatorApplicationStatus } from '../lib/types';
+import type { UserBadge, Campaign } from '../lib/types';
 import {
   isAdminRole,
   formatRoleLabel,
@@ -121,6 +124,10 @@ const UserDashboard: React.FC = () => {
   const { application, loading: appLoading } = useCreatorApplication();
   const { stats, likedProjects, recentComments, activity, loading: dashLoading, error: dashError, refresh } =
     useUserDashboardData();
+  const { userBadges, loading: badgesLoading } = useUserBadges();
+  const { joinedCampaigns, loading: campaignsLoading } = useUserCampaigns();
+
+  const [selectedBadge, setSelectedBadge] = useState<UserBadge | null>(null);
 
   const loading = profileLoading || appLoading || dashLoading;
   const effectiveRole = resolveUserRole(profile?.id, profile?.role);
@@ -386,10 +393,111 @@ const UserDashboard: React.FC = () => {
           <Link to="/leaderboard" className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors px-3 py-2 rounded-lg border border-white/10 hover:border-eg/30">
             Leaderboard →
           </Link>
+          <Link to="/campaigns" className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors px-3 py-2 rounded-lg border border-white/10 hover:border-eg/30">
+            Campaigns →
+          </Link>
           <Link to="/#projects" className="font-mono-custom text-xs text-white/50 hover:text-eg transition-colors px-3 py-2 rounded-lg border border-white/10 hover:border-eg/30">
             Browse Projects →
           </Link>
         </div>
+
+        {/* MY BADGES */}
+        {(badgesLoading || (userBadges && userBadges.length > 0)) && (
+          <section className="glass rounded-2xl p-5 border border-eg/15 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-eg" />
+                My Badges
+              </h2>
+              {userBadges && userBadges.length > 0 && (
+                <span className="font-mono-custom text-[10px] text-eg/60">{userBadges.length} earned</span>
+              )}
+            </div>
+            {badgesLoading ? (
+              <div className="flex gap-3 flex-wrap">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="w-16 h-16 rounded-xl bg-dark-300/50 animate-pulse border border-eg/10" />
+                ))}
+              </div>
+            ) : userBadges && userBadges.length > 0 ? (
+              <div className="flex flex-wrap gap-3">
+                {userBadges.map((ub) => (
+                  <BadgeCard
+                    key={ub.id}
+                    badge={ub.badge!}
+                    userBadge={ub}
+                    size="sm"
+                    onClick={() => setSelectedBadge(ub)}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </section>
+        )}
+
+        {/* ACTIVE CAMPAIGNS */}
+        {(campaignsLoading || (joinedCampaigns && joinedCampaigns.length > 0)) && (
+          <section className="glass rounded-2xl p-5 border border-eg/15 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-mono-custom text-xs tracking-widest text-white/50 uppercase flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-eg animate-pulse" />
+                Active Campaigns
+              </h2>
+              <Link to="/campaigns" className="font-mono-custom text-[10px] text-eg/60 hover:text-eg transition-colors">
+                View All →
+              </Link>
+            </div>
+            {campaignsLoading ? (
+              <div className="space-y-3">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-16 rounded-xl bg-dark-300/50 animate-pulse border border-eg/10" />
+                ))}
+              </div>
+            ) : joinedCampaigns && joinedCampaigns.length > 0 ? (
+              <ul className="space-y-3">
+                {joinedCampaigns.slice(0, 5).map((campaign: Campaign) => {
+                  const progress = (campaign.user_progress as any)?.progress_percent ?? null;
+                  return (
+                    <li key={campaign.id}>
+                      <Link
+                        to={`/campaigns/${campaign.slug}`}
+                        className="flex items-center gap-4 p-3 rounded-xl border border-white/5 bg-dark-200/40 hover:border-eg/25 hover:bg-dark-200/70 transition-all group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-display text-xs font-semibold text-white group-hover:text-eg transition-colors truncate">
+                            {campaign.title}
+                          </p>
+                          {progress !== null && (
+                            <div className="mt-1.5 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono-custom text-[9px] text-white/40">PROGRESS</span>
+                                <span className="font-mono-custom text-[9px] text-eg/70">{Math.round(progress)}%</span>
+                              </div>
+                              <div className="w-full h-1 bg-dark-400 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-eg rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(100, Math.round(progress))}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-eg/40 group-hover:text-eg transition-colors flex-shrink-0" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </section>
+        )}
+
+        <BadgeDetailModal
+          isOpen={!!selectedBadge}
+          userBadge={selectedBadge}
+          badge={selectedBadge?.badge ?? null}
+          onClose={() => setSelectedBadge(null)}
+        />
       </main>
     </div>
   );

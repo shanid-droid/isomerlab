@@ -363,6 +363,169 @@ export interface ActivityLog {
   created_at: string;
 }
 
+/* ── Badge & Campaign System Types ────────────────────────────── */
+
+export type BadgeRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type BadgeCategory = 'general' | 'community' | 'creator' | 'campaign' | 'special_event' | 'achievement';
+export type BadgeSourceType = 'admin' | 'campaign' | 'campaign_drop' | 'achievement';
+
+export interface Badge {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon_url?: string | null;
+  category: BadgeCategory;
+  rarity: BadgeRarity;
+  color_theme?: string | null;
+  is_active: boolean;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  holders_count?: number;
+}
+
+export interface UserBadge {
+  id: string;
+  user_id: string;
+  badge_id: string;
+  source_type: BadgeSourceType;
+  source_id?: string | null;
+  source_title?: string | null;
+  awarded_by?: string | null;
+  awarded_at: string;
+  notes?: string | null;
+  badge?: Badge;
+}
+
+export type CampaignStatus = 'draft' | 'published' | 'active' | 'upcoming' | 'ended' | 'archived';
+
+export type CampaignRequirementType =
+  | 'like_project'
+  | 'comment_project'
+  | 'publish_project'
+  | 'profile_complete'
+  | 'apply_creator'
+  | 'link_social'
+  | 'community_action'
+  | 'custom_check';
+
+export interface CampaignRequirement {
+  id: string;
+  campaign_id: string;
+  title: string;
+  description?: string | null;
+  requirement_type: CampaignRequirementType;
+  target_count: number;
+  target_entity_id?: string | null;
+  metadata?: Record<string, unknown>;
+  sort_order: number;
+  is_required: boolean;
+  created_at: string;
+}
+
+export type CampaignRewardType = 'badge' | 'drop' | 'role' | 'custom';
+export type CampaignEligibilityType = 'all_requirements' | 'min_requirements_count' | 'manual';
+
+export interface CampaignReward {
+  id: string;
+  campaign_id: string;
+  title: string;
+  description?: string | null;
+  reward_type: CampaignRewardType;
+  badge_id?: string | null;
+  drop_details?: Record<string, unknown>;
+  max_claims?: number | null;
+  claimed_count: number;
+  eligibility_type: CampaignEligibilityType;
+  min_requirements_count: number;
+  is_claimable: boolean;
+  is_automatic: boolean;
+  sort_order: number;
+  created_at: string;
+  badge?: Badge | null;
+  has_claimed?: boolean;
+}
+
+export interface CampaignParticipant {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  joined_at: string;
+  completed_at?: string | null;
+  status: 'in_progress' | 'completed' | 'disqualified';
+  metadata?: Record<string, unknown>;
+  user_profile?: UserProfile | null;
+}
+
+export interface CampaignClaim {
+  id: string;
+  campaign_id: string;
+  campaign_reward_id: string;
+  user_id: string;
+  badge_id?: string | null;
+  claimed_at: string;
+  status: 'claimed' | 'revoked';
+  metadata?: Record<string, unknown>;
+  reward?: CampaignReward | null;
+  user_profile?: UserProfile | null;
+}
+
+export interface CampaignRequirementProgress {
+  id: string;
+  title: string;
+  description?: string | null;
+  requirement_type: CampaignRequirementType;
+  target_count: number;
+  target_entity_id?: string | null;
+  current_count: number;
+  is_completed: boolean;
+  is_required: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CampaignProgressResult {
+  is_participant: boolean;
+  participant_status: string;
+  total_requirements: number;
+  completed_requirements: number;
+  progress_percent: number;
+  requirements: CampaignRequirementProgress[];
+}
+
+export interface Campaign {
+  id: string;
+  title: string;
+  slug: string;
+  short_description: string;
+  description?: string | null;
+  banner_url?: string | null;
+  thumbnail_url?: string | null;
+  status: CampaignStatus;
+  start_date: string;
+  end_date?: string | null;
+  is_featured: boolean;
+  featured_order: number;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  requirements?: CampaignRequirement[];
+  rewards?: CampaignReward[];
+  participants_count?: number;
+  claims_count?: number;
+  is_joined?: boolean;
+  user_progress?: CampaignProgressResult;
+}
+
+export interface CampaignAnalytics {
+  participants_count: number;
+  completed_count: number;
+  claims_count: number;
+  drops_claimed: number;
+  badges_awarded: number;
+  completion_rate: number;
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -404,6 +567,27 @@ export type Database = {
       };
       project_versions: {
         Row: ProjectVersion;
+      };
+      badges: {
+        Row: Badge;
+      };
+      user_badges: {
+        Row: UserBadge;
+      };
+      campaigns: {
+        Row: Campaign;
+      };
+      campaign_requirements: {
+        Row: CampaignRequirement;
+      };
+      campaign_rewards: {
+        Row: CampaignReward;
+      };
+      campaign_participants: {
+        Row: CampaignParticipant;
+      };
+      campaign_claims: {
+        Row: CampaignClaim;
       };
     };
   };

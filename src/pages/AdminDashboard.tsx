@@ -14,6 +14,8 @@ import NotificationsPanel from '../components/admin/NotificationsPanel';
 import { CommentsManagementPanel } from '../components/admin/CommentsManagementPanel';
 import { LeaderboardControlPanel } from '../components/admin/LeaderboardControlPanel';
 import { LeaderboardPublishingPanel } from '../components/admin/LeaderboardPublishingPanel';
+import { CampaignsManagementPanel } from '../components/admin/CampaignsManagementPanel';
+import { BadgesManagementPanel } from '../components/admin/BadgesManagementPanel';
 import { OWNER_ID } from '../lib/constants';
 import {
   formatRoleLabel,
@@ -121,7 +123,9 @@ type AdminTab =
   | 'site-control'
   | 'notifications'
   | 'comments'
-  | 'leaderboard';
+  | 'leaderboard'
+  | 'campaigns'
+  | 'badges';
 
 /* ── Sidebar nav item ────────────────────────────────────────── */
 interface NavItemProps {
@@ -826,6 +830,32 @@ const AdminDashboard: React.FC = () => {
           onClick={handleNavigate as any}
         />
 
+        {/* ENGAGEMENT */}
+        <SectionLabel label="Engagement" />
+        <NavItem
+          label="Campaigns"
+          tab="campaigns"
+          active={activeTab === 'campaigns'}
+          icon={
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path d="M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M7 5h.01M7 12h.01M7 19h.01" strokeLinecap="round" />
+            </svg>
+          }
+          onClick={handleNavigate as any}
+        />
+        <NavItem
+          label="Badges"
+          tab="badges"
+          active={activeTab === 'badges'}
+          icon={
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          }
+          onClick={handleNavigate as any}
+        />
+
         {/* SYSTEM (owner only) */}
         {isOwner && (
           <>
@@ -914,6 +944,8 @@ const AdminDashboard: React.FC = () => {
     notifications: { title: 'NOTIFICATIONS', subtitle: 'COMMUNITY' },
     comments: { title: 'COMMENTS', subtitle: 'COMMUNITY MODERATION' },
     leaderboard: { title: 'LEADERBOARD', subtitle: 'RANKINGS' },
+    campaigns: { title: 'CAMPAIGNS', subtitle: 'ENGAGEMENT' },
+    badges: { title: 'BADGES', subtitle: 'ENGAGEMENT' },
   };
 
   const currentPanel = panelTitles[activeTab];
@@ -1045,6 +1077,16 @@ const AdminDashboard: React.FC = () => {
                 <PanelHeading title="LEADERBOARD" subtitle="RANKINGS" />
                 {isOwner ? <LeaderboardControlPanel /> : <LeaderboardPublishingPanel />}
               </div>
+            )}
+
+            {/* ── CAMPAIGNS ── */}
+            {activeTab === 'campaigns' && (
+              <CampaignsManagementPanel />
+            )}
+
+            {/* ── BADGES ── */}
+            {activeTab === 'badges' && (
+              <BadgesManagementPanel />
             )}
 
             {/* ── PROJECTS ── */}

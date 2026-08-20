@@ -126,6 +126,12 @@ export const Navbar: React.FC = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-eg animate-pulse" />
             </Link>
           )}
+          <Link
+            to="/campaigns"
+            className="nav-link text-white/80 hover:text-eg flex items-center gap-1.5"
+          >
+            <span>Campaigns</span>
+          </Link>
         </nav>
 
         {/* CTA & User Portal link */}
@@ -187,6 +193,13 @@ export const Navbar: React.FC = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-eg" />
             </Link>
           )}
+          <Link
+            to="/campaigns"
+            onClick={() => setMenuOpen(false)}
+            className="nav-link text-left py-3 border-b border-eg/5 font-mono-custom text-xs text-white/70 hover:text-eg"
+          >
+            → Campaigns
+          </Link>
           <Link
             to={hasSession ? "/dashboard" : "/login"}
             className="nav-link text-left py-3 border-b border-eg/5 text-eg font-mono-custom text-xs"

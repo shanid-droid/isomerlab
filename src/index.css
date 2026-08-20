@@ -4,7 +4,10 @@
 
 /* ── Base ────────────────────────────────────────────────────── */
 @layer base {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     box-sizing: border-box;
   }
 
@@ -27,13 +30,16 @@
   ::-webkit-scrollbar {
     width: 4px;
   }
+
   ::-webkit-scrollbar-track {
     background: #080c0a;
   }
+
   ::-webkit-scrollbar-thumb {
     background: rgba(0, 255, 136, 0.3);
     border-radius: 2px;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 255, 136, 0.6);
   }
@@ -44,6 +50,7 @@
   .font-display {
     font-family: 'Orbitron', sans-serif;
   }
+
   .font-mono-custom {
     font-family: 'JetBrains Mono', monospace;
   }
@@ -52,6 +59,7 @@
   .text-glow {
     text-shadow: 0 0 20px rgba(0, 255, 136, 0.6), 0 0 40px rgba(0, 255, 136, 0.2);
   }
+
   .text-glow-sm {
     text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
   }
@@ -61,6 +69,7 @@
     border-color: rgba(0, 255, 136, 0.4);
     box-shadow: 0 0 12px rgba(0, 255, 136, 0.15), inset 0 0 12px rgba(0, 255, 136, 0.03);
   }
+
   .border-glow-hover:hover {
     border-color: rgba(0, 255, 136, 0.6);
     box-shadow: 0 0 20px rgba(0, 255, 136, 0.25), inset 0 0 20px rgba(0, 255, 136, 0.05);
@@ -84,8 +93,8 @@
   /* Circuit grid background */
   .bg-circuit {
     background-image:
-      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+      linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
     background-size: 60px 60px;
   }
 
@@ -103,6 +112,7 @@
   .gradient-bottom {
     background: linear-gradient(to bottom, transparent 60%, #080c0a 100%);
   }
+
   .gradient-right {
     background: linear-gradient(to right, #080c0a 0%, transparent 30%, transparent 70%, #080c0a 100%);
   }
@@ -117,55 +127,60 @@
 
 /* ── Component Styles ─────────────────────────────────────────── */
 @layer components {
+
   /* Nav link */
   .nav-link {
-    @apply relative font-mono-custom text-sm tracking-widest text-white/60 uppercase
-           transition-colors duration-300 hover:text-white py-1;
+    @apply relative font-mono-custom text-sm tracking-widest text-white/60 uppercase transition-colors duration-300 hover:text-white py-1;
   }
+
   .nav-link::after {
     content: '';
     @apply absolute bottom-0 left-0 w-0 h-px bg-eg transition-all duration-300;
   }
+
   .nav-link:hover::after,
   .nav-link.active::after {
     @apply w-full;
   }
+
   .nav-link.active {
     @apply text-white;
   }
 
   /* Primary button */
   .btn-primary {
-    @apply relative inline-flex items-center gap-2 px-5 py-2.5
-           font-mono-custom text-xs tracking-widest uppercase text-white
-           border border-eg/40 rounded
-           transition-all duration-300 overflow-hidden;
-    background: rgba(0,255,136,0.06);
+    @apply relative inline-flex items-center gap-2 px-5 py-2.5 font-mono-custom text-xs tracking-widest uppercase text-white border border-eg/40 rounded transition-all duration-300 overflow-hidden;
+    background: rgba(0, 255, 136, 0.06);
   }
+
   .btn-primary::before {
     content: '';
     @apply absolute inset-0 opacity-0 transition-opacity duration-300;
-    background: linear-gradient(135deg, rgba(0,255,136,0.1) 0%, transparent 60%);
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, transparent 60%);
   }
+
   .btn-primary:hover {
     @apply border-eg/70 shadow-eg-sm;
-    background: rgba(0,255,136,0.12);
+    background: rgba(0, 255, 136, 0.12);
   }
+
   .btn-primary:hover::before {
     @apply opacity-100;
   }
 
   /* Outlined secondary button */
   .btn-outline {
-    @apply inline-flex items-center gap-2 text-eg font-mono-custom text-xs
-           tracking-widest uppercase transition-all duration-300;
+    @apply inline-flex items-center gap-2 text-eg font-mono-custom text-xs tracking-widest uppercase transition-all duration-300;
   }
+
   .btn-outline svg {
     @apply transition-transform duration-300;
   }
+
   .btn-outline:hover svg {
     @apply translate-x-1;
   }
+
   .btn-outline:hover {
     @apply text-eg/80 text-glow-sm;
   }
@@ -178,11 +193,12 @@
   /* Card */
   .card {
     @apply glass rounded-lg overflow-hidden transition-all duration-500;
-    box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 32px rgba(0, 0, 0, 0.5);
   }
+
   .card:hover {
     border-color: rgba(0, 255, 136, 0.25);
-    box-shadow: 0 8px 48px rgba(0,0,0,0.7), 0 0 24px rgba(0,255,136,0.1);
+    box-shadow: 0 8px 48px rgba(0, 0, 0, 0.7), 0 0 24px rgba(0, 255, 136, 0.1);
     transform: translateY(-4px);
   }
 
@@ -206,35 +222,161 @@
 
 /* ── Misc Animations ─────────────────────────────────────────── */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(30px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
 @keyframes fadeInLeft {
-  from { opacity: 0; transform: translateX(-30px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
+
 @keyframes fadeInRight {
-  from { opacity: 0; transform: translateX(30px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
 }
 
-.animate-fade-in-up    { animation: fadeInUp    0.8s ease forwards; }
-.animate-fade-in-left  { animation: fadeInLeft  0.8s ease forwards; }
-.animate-fade-in-right { animation: fadeInRight 0.8s ease forwards; }
-.animate-blink         { animation: blink 1s step-end infinite; }
+@keyframes ping {
 
-.delay-100 { animation-delay: 0.1s; }
-.delay-200 { animation-delay: 0.2s; }
-.delay-300 { animation-delay: 0.3s; }
-.delay-400 { animation-delay: 0.4s; }
-.delay-500 { animation-delay: 0.5s; }
-.delay-600 { animation-delay: 0.6s; }
-.delay-700 { animation-delay: 0.7s; }
-.delay-800 { animation-delay: 0.8s; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
+}
+
+@keyframes bounceShort {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-8px);
+  }
+
+  50% {
+    transform: translateY(0);
+  }
+
+  70% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.8s ease forwards;
+}
+
+.animate-fade-in-left {
+  animation: fadeInLeft 0.8s ease forwards;
+}
+
+.animate-fade-in-right {
+  animation: fadeInRight 0.8s ease forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+.animate-ping {
+  animation: ping 1.5s ease-in-out infinite;
+}
+
+.animate-bounce-short {
+  animation: bounceShort 0.8s ease-in-out both;
+}
+
+/* Radial glow background for badge modals */
+.bg-radial-glow {
+  background: radial-gradient(ellipse at center, rgba(0, 255, 136, 0.15) 0%, transparent 70%);
+}
+
+.delay-100 {
+  animation-delay: 0.1s;
+}
+
+.delay-200 {
+  animation-delay: 0.2s;
+}
+
+.delay-300 {
+  animation-delay: 0.3s;
+}
+
+.delay-400 {
+  animation-delay: 0.4s;
+}
+
+.delay-500 {
+  animation-delay: 0.5s;
+}
+
+.delay-600 {
+  animation-delay: 0.6s;
+}
+
+.delay-700 {
+  animation-delay: 0.7s;
+}
+
+.delay-800 {
+  animation-delay: 0.8s;
+}
 
 /* ── ISOMER Video Player – fullscreen fixes ────────────────────── */
 /* Ensure video never crops in any fullscreen mode */
@@ -247,6 +389,7 @@
   justify-content: center;
   border-radius: 0;
 }
+
 .isomer-video-player:fullscreen video {
   width: 100%;
   height: 100%;
@@ -263,6 +406,7 @@
   justify-content: center;
   border-radius: 0;
 }
+
 .isomer-video-player:-moz-full-screen video {
   width: 100%;
   height: 100%;
@@ -279,6 +423,7 @@
   justify-content: center;
   border-radius: 0;
 }
+
 .isomer-video-player:-webkit-full-screen video {
   width: 100%;
   height: 100%;
