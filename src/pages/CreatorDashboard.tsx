@@ -345,9 +345,11 @@ const CreatorDashboard: React.FC = () => {
   const generateSlug = (title: string) =>
     title.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '');
 
-  const uploadFile = async (file: File, folder: string): Promise<string> => {
+  const uploadFile = async (file: File, folder: string, projectId?: string): Promise<string> => {
     const clean = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const path = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${clean}`;
+    const path = projectId
+      ? `${folder}/${projectId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${clean}`
+      : `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${clean}`;
     const { error } = await supabase.storage.from('project-images').upload(path, file, { cacheControl: '3600', upsert: false });
     if (error) throw new Error(error.message);
     return supabase.storage.from('project-images').getPublicUrl(path).data.publicUrl;
@@ -446,13 +448,6 @@ const CreatorDashboard: React.FC = () => {
     setSubmitting(true); setFormError(null);
     try {
       const componentsArray = formComponents.split(',').map(c => c.trim()).filter(Boolean);
-      let thumbnailUrl = editingProject?.thumbnail_url || null;
-      if (formThumbnailFile) {
-        setSubmitStatusText('Uploading thumbnail...');
-        const newUrl = await uploadFile(formThumbnailFile, 'thumbnails');
-        if (editingProject?.thumbnail_url) await removeStorageFile(editingProject.thumbnail_url);
-        thumbnailUrl = newUrl;
-      }
       const cleanedLinks = formProjectLinks
         .filter(l => l.url && l.url.trim() !== '')
         .map(l => ({ ...l, url: formatValidUrl(l.url), title: l.title.trim() || l.type.toUpperCase() }));
@@ -462,7 +457,7 @@ const CreatorDashboard: React.FC = () => {
         title: formTitle.trim(), slug: formSlug.trim(),
         description: formDescription.trim(), components: componentsArray,
         github_url: syncedGithub, project_links: cleanedLinks,
-        thumbnail_url: thumbnailUrl, published: formPublished,
+        published: formPublished,
       };
       let projectId = editingProject?.id;
       if (editingProject) {
@@ -473,6 +468,31 @@ const CreatorDashboard: React.FC = () => {
         if (error) throw error;
         projectId = data.id;
       }
+
+      if (formThumbnailFile && projectId) {
+        setSubmitStatusText('Uploading thumbnail...');
+        const newUrl = await uploadFile(formThumbnailFile, 'thumbnails', projectId);
+        if (editingProject?.thumbnail_url) await removeStorageFile(editingProject.thumbnail_url);
+        const { error: thumbError } = await supabase.from('projects').update({ thumbnail_url: newUrl }).eq('id', projectId);
+        if (thumbError) throw thumbError;
+      }
+
+      if (projectId && payload.description !== undefined) {
+        const { data: defaultVer } = await supabase
+          .from('project_versions')
+          .select('id')
+          .eq('project_id', projectId)
+          .eq('is_default', true)
+          .maybeSingle();
+
+        if (defaultVer?.id) {
+          await supabase
+            .from('project_versions')
+            .update({ description: payload.description })
+            .eq('id', defaultVer.id);
+        }
+      }
+
       if (deletingGalleryIds.length > 0) {
         setSubmitStatusText('Removing deleted media...');
         const toDelete = existingGallery.filter(item => deletingGalleryIds.includes(item.id));

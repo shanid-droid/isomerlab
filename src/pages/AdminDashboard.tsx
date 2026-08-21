@@ -543,9 +543,11 @@ const AdminDashboard: React.FC = () => {
     } catch { /* non-fatal */ }
   };
 
-  const uploadFileToSupabase = async (file: File, folder: string): Promise<string> => {
+  const uploadFileToSupabase = async (file: File, folder: string, projectId?: string): Promise<string> => {
     const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const path = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${cleanFileName}`;
+    const path = projectId
+      ? `${folder}/${projectId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${cleanFileName}`
+      : `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${cleanFileName}`;
     const { error: uploadError } = await supabase.storage
       .from('project-images')
       .upload(path, file, { cacheControl: '3600', upsert: false });
@@ -564,14 +566,6 @@ const AdminDashboard: React.FC = () => {
     setFormError(null);
     try {
       const componentsArray = formComponents.split(',').map((c) => c.trim()).filter(Boolean);
-      let thumbnailUrl = editingProject?.thumbnail_url || null;
-
-      if (formThumbnailFile) {
-        setSubmitStatusText('Uploading thumbnail...');
-        const newThumb = await uploadFileToSupabase(formThumbnailFile, 'thumbnails');
-        if (editingProject?.thumbnail_url) await removeFileFromSupabaseStorage(editingProject.thumbnail_url);
-        thumbnailUrl = newThumb;
-      }
 
       const cleanedLinks = formProjectLinks
         .filter((l) => l.url && l.url.trim() !== '')
@@ -583,7 +577,7 @@ const AdminDashboard: React.FC = () => {
       const projectPayload: any = {
         title: formTitle.trim(), slug: formSlug.trim(), description: formDescription.trim(),
         components: componentsArray, github_url: syncedGithubUrl,
-        project_links: cleanedLinks, thumbnail_url: thumbnailUrl, published: formPublished,
+        project_links: cleanedLinks, published: formPublished,
       };
 
       let projectId = editingProject?.id;
@@ -597,6 +591,30 @@ const AdminDashboard: React.FC = () => {
         const { data: newProj, error: insertError } = await supabase.from('projects').insert([projectPayload]).select().single();
         if (insertError) throw insertError;
         projectId = newProj.id;
+      }
+
+      if (formThumbnailFile && projectId) {
+        setSubmitStatusText('Uploading thumbnail...');
+        const newThumb = await uploadFileToSupabase(formThumbnailFile, 'thumbnails', projectId);
+        if (editingProject?.thumbnail_url) await removeFileFromSupabaseStorage(editingProject.thumbnail_url);
+        const { error: thumbUpdateError } = await supabase.from('projects').update({ thumbnail_url: newThumb }).eq('id', projectId);
+        if (thumbUpdateError) throw thumbUpdateError;
+      }
+
+      if (projectId && projectPayload.description !== undefined) {
+        const { data: defaultVer } = await supabase
+          .from('project_versions')
+          .select('id')
+          .eq('project_id', projectId)
+          .eq('is_default', true)
+          .maybeSingle();
+
+        if (defaultVer?.id) {
+          await supabase
+            .from('project_versions')
+            .update({ description: projectPayload.description })
+            .eq('id', defaultVer.id);
+        }
       }
 
       if (deletingGalleryIds.length > 0) {

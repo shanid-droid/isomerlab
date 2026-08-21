@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Navbar }               from './components/ui';
 import Hero                     from './components/Hero';
 import FeaturedProjectSection   from './components/FeaturedProjectSection';
@@ -27,6 +27,19 @@ import CampaignsPage from './pages/Campaigns';
 import CampaignDetailPage from './pages/CampaignDetail';
 import { supabase } from './lib/supabase';
 import { getPostLoginPath } from './lib/roles';
+
+const ScrollToTop: React.FC = () => {
+  const { pathname, search } = useLocation();
+
+  useEffect(() => {
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+  }, [pathname, search]);
+
+  return null;
+};
 
 /* ── Home page (scene-based laboratory layout) ───────────────────── */
 
@@ -71,6 +84,7 @@ const HomePage: React.FC = () => {
 const App: React.FC = () => (
   <BrowserRouter>
     <MaintenanceGuard>
+      <ScrollToTop />
       <Routes>
         {/* Public routes */}
         <Route path="/"                element={<HomePage />} />
